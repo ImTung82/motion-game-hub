@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../../ui/widgets/text_painter_cache.dart';
 import 'egg_smasher_engine.dart';
 import 'egg_smasher_models.dart';
 
@@ -195,15 +196,7 @@ class EggSmasherCanvasPainter extends CustomPainter {
     canvas.drawCircle(badgeCenter, badgeRadius, badgeBorder);
 
     // Vẽ Icon Emoji minh họa to, rõ ràng, căn chính giữa huy hiệu
-    final emojiSpan = TextSpan(
-      text: egg.word.iconEmoji,
-      style: TextStyle(fontSize: rx * 0.64),
-    );
-    final emojiPainter = TextPainter(
-      text: emojiSpan,
-      textDirection: TextDirection.ltr,
-    );
-    emojiPainter.layout();
+    final emojiPainter = TextPainterCache.get(egg.word.iconEmoji, TextStyle(fontSize: rx * 0.64));
     emojiPainter.paint(
       canvas,
       Offset(-emojiPainter.width / 2, badgeCenter.dy - emojiPainter.height / 2),
@@ -311,32 +304,19 @@ class EggSmasherCanvasPainter extends CustomPainter {
     canvas.drawRRect(cardRect, cardBorder);
 
     // Emoji to khổng lồ
-    final emojiSpan = TextSpan(
-      text: c.word.iconEmoji,
-      style: const TextStyle(fontSize: 42),
-    );
-    final emojiPainter = TextPainter(
-      text: emojiSpan,
-      textDirection: TextDirection.ltr,
-    );
-    emojiPainter.layout();
+    final emojiPainter = TextPainterCache.get(c.word.iconEmoji, const TextStyle(fontSize: 42));
     emojiPainter.paint(canvas, Offset(-emojiPainter.width / 2, -cardH * 0.42));
 
     // Chữ từ vựng Phonics
-    final wordSpan = TextSpan(
-      text: c.word.word,
-      style: const TextStyle(
+    final wordPainter = TextPainterCache.get(
+      c.word.word,
+      const TextStyle(
         fontSize: 20,
         fontWeight: FontWeight.w900,
         letterSpacing: 1.5,
         color: Color(0xFF0F172A),
       ),
     );
-    final wordPainter = TextPainter(
-      text: wordSpan,
-      textDirection: TextDirection.ltr,
-    );
-    wordPainter.layout();
     wordPainter.paint(canvas, Offset(-wordPainter.width / 2, 14));
 
     canvas.restore();

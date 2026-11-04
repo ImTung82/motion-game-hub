@@ -41,6 +41,44 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
+  <!--
+    Màn hình tần số cao (120/144Hz): Flutter chỉ vẽ cách khung >= 10ms (144Hz -> 72 FPS, 120Hz -> 60 FPS;
+    60/90Hz giữ nguyên). Vẽ 144 FPS chiếm GPU của MediaPipe: đo trên laptop Intel UHD, nhận diện tay
+    93ms -> 58ms/lần (11 -> 17 lần/giây), game vẫn đều 72 FPS. Tắt để đo: thêm ?fps=max vào URL.
+    Mọi callback trong cùng 1 vsync có chung timestamp => cho qua / hoãn cả nhóm, không làm lệch nhau.
+  -->
+  <script>
+    (() => {
+      if (new URLSearchParams(location.search).get('fps') === 'max') return;
+      const MIN_FRAME_GAP_MS = 10;
+      const raf = window.requestAnimationFrame.bind(window);
+      const caf = window.cancelAnimationFrame.bind(window);
+      const pending = new Map(); // id trả cho người gọi -> id rAF thật hiện tại (đổi mỗi lần hoãn)
+      let nextId = 1;
+      let lastFrame = -Infinity;
+      window.requestAnimationFrame = (callback) => {
+        const id = nextId++;
+        const onVsync = (t) => {
+          if (t !== lastFrame && t - lastFrame < MIN_FRAME_GAP_MS) {
+            pending.set(id, raf(onVsync));
+            return;
+          }
+          pending.delete(id);
+          lastFrame = t;
+          callback(t);
+        };
+        pending.set(id, raf(onVsync));
+        return id;
+      };
+      window.cancelAnimationFrame = (id) => {
+        const real = pending.get(id);
+        if (real === undefined) return;
+        pending.delete(id);
+        caf(real);
+      };
+    })();
+  </script>
+
   <!-- Camera + MediaPipe cho bản web (window.motionBridge) -->
   <script type="module" src="motion/motion_bridge.js"></script>
   <script src="flutter_bootstrap.js" async></script>

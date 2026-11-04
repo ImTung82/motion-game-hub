@@ -7,6 +7,7 @@ import '../../ui/widgets/calibration_dialog.dart';
 import '../../ui/widgets/camera_pip_overlay.dart';
 import '../../ui/widgets/company_logo_badge.dart';
 import '../../ui/widgets/kid_ui.dart';
+import '../../ui/widgets/listenable_selector.dart';
 import '../../ui/widgets/rabbit_mascot.dart';
 import '../../ui/widgets/lives_hearts.dart';
 import '../../ui/widgets/ready_gate.dart';
@@ -162,11 +163,14 @@ class _EggSmasherScreenState extends State<EggSmasherScreen> with SingleTickerPr
                   final py = details.localPosition.dy / constraints.maxHeight;
                   _engine.triggerSmashDirect(px, py);
                 },
-                child: CustomPaint(
-                  size: Size(constraints.maxWidth, constraints.maxHeight),
-                  painter: EggSmasherCanvasPainter(
-                    engine: _engine,
-                    animationValue: _animationValue,
+                // RepaintBoundary: canvas vẽ lại mỗi khung, HUD phía trên không phải vẽ lại theo
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                    size: Size(constraints.maxWidth, constraints.maxHeight),
+                    painter: EggSmasherCanvasPainter(
+                      engine: _engine,
+                      animationValue: _animationValue,
+                    ),
                   ),
                 ),
               );
@@ -223,8 +227,9 @@ class _EggSmasherScreenState extends State<EggSmasherScreen> with SingleTickerPr
           ),
 
           // 6. TẠM DỪNG
-          ListenableBuilder(
+          ListenableSelector(
             listenable: _engine,
+            selector: () => _engine.isPaused,
             builder: (context, _) {
               if (!_engine.isPaused) return const SizedBox.shrink();
               return KidDialog(
@@ -254,8 +259,9 @@ class _EggSmasherScreenState extends State<EggSmasherScreen> with SingleTickerPr
           ),
 
           // 7. KẾT THÚC (Endless mode): lời khen tích cực cho bé, kể cả khi không phá kỷ lục
-          ListenableBuilder(
+          ListenableSelector(
             listenable: _engine,
+            selector: () => (_engine.isGameOver, _engine.isNewHighScore, _engine.score, _engine.eggsSmashed, _engine.highScore),
             builder: (context, _) {
               if (!_engine.isGameOver) return const SizedBox.shrink();
               final isRecord = _engine.isNewHighScore;
@@ -318,8 +324,9 @@ class _EggSmasherScreenState extends State<EggSmasherScreen> with SingleTickerPr
       top: pad.top + _hudMargin * s,
       left: pad.left + _hudMargin * s,
       right: pad.right + _hudMargin * s,
-      child: ListenableBuilder(
+      child: ListenableSelector(
         listenable: _engine,
+        selector: () => (_engine.lives, _engine.isPaused),
         builder: (context, _) {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -372,8 +379,9 @@ class _EggSmasherScreenState extends State<EggSmasherScreen> with SingleTickerPr
               SizedBox(width: gap),
 
               // ẨN/HIỆN CAMERA
-              ListenableBuilder(
+              ListenableSelector(
                 listenable: widget.motionController,
+                selector: () => widget.motionController.showCameraPip,
                 builder: (context, _) {
                   final bool isCamVisible = widget.motionController.showCameraPip;
                   return KidIconButton(
@@ -430,8 +438,9 @@ class _EggSmasherScreenState extends State<EggSmasherScreen> with SingleTickerPr
       // Căn giữa thỏ trên logo
       left: pad.left + _hudMargin * s + math.max(0.0, (logoW - rabbitW) / 2),
       bottom: pad.bottom + 8 * s + _logoH * s + 2,
-      child: ListenableBuilder(
+      child: ListenableSelector(
         listenable: _engine,
+        selector: () => (_engine.currentTarget, _engine.isRoundTransition, _engine.lastSmashCorrect, _engine.eggsSmashed, _engine.lives),
         builder: (context, _) {
           final target = _engine.currentTarget;
           if (target == null) return const SizedBox.shrink();
