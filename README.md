@@ -1,49 +1,107 @@
-﻿# ðŸ•¹ï¸ Motion Game Arcade Hub (Dá»± Ã¡n Game Äá»™c Láº­p)
+﻿# 🕹️ Motion Game Hub
 
-Dá»± Ã¡n Flutter Ä‘á»™c láº­p hoÃ n toÃ n, káº¿ thá»«a Ã½ tÆ°á»Ÿng tá»« **Motion Touch** Ä‘á»ƒ xÃ¢y dá»±ng **Trung tÃ¢m trÃ² chÆ¡i tÆ°Æ¡ng tÃ¡c báº±ng cá»­ chá»‰ khuÃ´n máº·t qua camera trÆ°á»›c Ä‘iá»‡n thoáº¡i**.
+Bộ game học tiếng Anh cho trẻ mẫu giáo của **Enspire Digital**, điều khiển hoàn toàn bằng **cử chỉ khuôn mặt và bàn tay** qua camera trước. Bé nghe từ vựng, rồi nghiêng đầu, lướt tay, nắm tay hoặc vỗ tay để chọn đúng hình.
 
-ÄÆ°á»ng dáº«n dá»± Ã¡n: `d:\flutter_workspace\motion_game_hub`
-
----
-
-## ðŸŒŸ Äiá»ƒm ná»•i báº­t & Kiáº¿n trÃºc Arcade Hub
-
-- **Menu Chá»n Game (Arcade Launcher)**: Giao diá»‡n Cyberpunk Neon sá»‘ng Ä‘á»™ng, cho phÃ©p chá»n nhiá»u tá»±a game khÃ¡c nhau, lÆ°u ká»· lá»¥c (High Score) riÃªng tá»«ng game.
-- **Shared Motion Engine (Camera + ML Kit Face Detection)**:
-  - Khá»Ÿi táº¡o camera trÆ°á»›c má»™t láº§n, chia sáº» dá»¯ liá»‡u nháº­n diá»‡n cho má»i game.
-  - Bá»™ lá»c **EMA Smoothing** chá»‘ng rung giáº­t camera.
-  - Thuáº­t toÃ¡n **Hysteresis & Baseline Calibration** (cÃ¢n báº±ng tÆ° tháº¿ máº·t ngÆ°á»i chÆ¡i).
-- **Cá»­a sá»• Camera PiP gÃ³c mÃ n hÃ¬nh**: Hiá»ƒn thá»‹ camera thá»±c táº¿, khung nháº­n diá»‡n máº·t, thÆ°á»›c Ä‘o gÃ³c nghiÃªng (Â°), thÆ°á»›c Ä‘o Ä‘á»™ hÃ¡ miá»‡ng (%) vÃ  FPS.
-- **Cháº¿ Ä‘á»™ phÃ­m áº£o dá»± phÃ²ng**: Cho phÃ©p chÆ¡i báº±ng cáº£m á»©ng/phÃ­m áº£o báº¥t cá»© lÃºc nÃ o.
+Ứng dụng viết bằng Flutter. Nhận diện khuôn mặt dùng **Google ML Kit**, nhận diện bàn tay dùng **MediaPipe Hand Landmarker**.
 
 ---
 
-## ðŸŽ® Danh sÃ¡ch Game trong Arcade Hub
+## 🎛️ Chế độ điều khiển
 
-### 1. ðŸš€ Sky Chomp Hero (Endless Sky Runner)
-- **CÃ¡ch Ä‘iá»u khiá»ƒn**:
-  - **NghiÃªng Ä‘áº§u TrÃ¡i / Pháº£i**: LÆ°á»£n phi thuyá»n nÃ© thiÃªn tháº¡ch vÃ  chÆ°á»›ng ngáº¡i váº­t laser.
-  - **HÃ¡ miá»‡ng tháº­t to "CHOMP!"**: Äá»›p sao â­, pizza ðŸ•, donut ðŸ©, tÃ­ch lÅ©y Ä‘iá»ƒm Combo x2, x3 vÃ  kÃ­ch hoáº¡t **FEVER MODE** báº¥t tá»­ hÃºt má»i váº­t pháº©m!
+| Chế độ | Cử chỉ | Game |
+|---|---|---|
+| 🙂 **Face** | Nghiêng đầu trái/phải để di chuyển, gật đầu hoặc há miệng để kích hoạt | Fruits Kick, Egg Smasher |
+| ✋ **1-Hand** | Lướt hoặc nghiêng bàn tay để di chuyển, nắm tay để kích hoạt | Fruits Kick, Egg Smasher |
+| 👐 **2-Hands** | Hai tay điều khiển độc lập trái/phải, nắm tay hoặc chụm 2 tay để bắt | Goalkeeper Hero |
 
-### 2. ðŸ¥ Flappy Mouth (Flappy Bird báº±ng cá»­ chá»‰ miá»‡ng)
-- **CÃ¡ch Ä‘iá»u khiá»ƒn**:
-  - **HÃ¡ miá»‡ng to**: ChÃº chim Ä‘áº­p cÃ¡nh bay vá»t lÃªn! Ngáº­m miá»‡ng Ä‘á»ƒ chÃº chim lÆ°á»£n háº¡ dáº§n theo trá»ng lá»±c.
-  - **NghiÃªng Ä‘áº§u**: HÃ£m tá»‘c Ä‘á»™ hoáº·c tÄƒng tá»‘c lÆ°á»›t qua cÃ¡c khe háº¹p giá»¯a cÃ¡c cá»™t neon.
-
-### 3. ðŸ‰ Fruit Tilt Catcher (Khung sáºµn sÃ ng má»Ÿ rá»™ng)
-- Há»©ng trÃ¡i cÃ¢y báº±ng cÃ¡ch nghiÃªng Ä‘áº§u cÃ¢n báº±ng Ä‘Ä©a há»©ng.
+Chọn chế độ Face / Hand ngay trên menu chính; chế độ 2 tay có sảnh riêng (**2-HANDS HUB**).
 
 ---
 
-## ðŸš€ HÆ°á»›ng dáº«n cháº¡y dá»± Ã¡n
+## 🎮 Danh sách game
 
-Má»Ÿ terminal táº¡i thÆ° má»¥c dá»± Ã¡n má»›i:
+### ⚽ Fruits Kick
+Nghe tên một loại quả, rồi sút bóng vào ô khung thành có hình đúng quả đó.
 
-```powershell
-cd d:\flutter_workspace\motion_game_hub
-flutter run
+- **Face:** nghiêng đầu để ngắm, gật đầu hoặc há miệng để sút.
+- **1-Hand:** đưa bàn tay xòe để ngắm, nắm tay để sút.
+
+### 🥚 Egg Smasher
+Nghe một từ, rồi đập vỡ quả trứng có hình đúng từ đó để nở ra một bạn nhỏ.
+
+- **Face:** nghiêng đầu để chọn trứng, gật đầu để đập.
+- **1-Hand:** đưa bàn tay xòe để chọn trứng, nắm tay để đập.
+
+### 🧤 Goalkeeper Hero (2-Hands)
+Làm thủ môn, dùng cả hai tay chặn bóng và học từ vựng theo chủ đề.
+
+- **Cử chỉ:** di chuyển hai tay để che khung thành, nắm tay hoặc chụm hai tay để bắt bóng.
+- **Mức độ:** 🐢 Easy, 🐰 Medium, 🚀 Hard.
+- **Chủ đề từ vựng:** 🍎 Fruits, 🐶 Animals, 📦 Things, 🎲 Mixed.
+
+---
+
+## ✨ Tính năng chung
+
+- **Bước chuẩn bị đầu ván:** mỗi ván chờ camera thấy mặt / tay, đếm ngược 3-2-1 rồi mới bắt đầu và đọc đề.
+- **Camera Setup (hiệu chỉnh):** xem trực tiếp camera, thước đo nghiêng / há miệng / nắm tay / vỗ tay, chỉnh độ nhạy, cân bằng tư thế gốc, xoay camera.
+- **Camera PiP trong game:** khung camera nhỏ ở góc màn hình (bật / tắt từ HUD).
+- **Nút cảm ứng dự phòng:** bật trong Camera Setup để chơi bằng chạm khi không dùng cử chỉ.
+- **Linh vật thỏ, âm thanh và giọng đọc từ vựng**, lưu kỷ lục (high score) riêng cho từng game.
+- **Bộ lọc chống rung & vùng chết** giúp điều khiển mượt và ổn định cho trẻ nhỏ.
+
+---
+
+## 📱 Nền tảng
+
+| Nền tảng | Trạng thái |
+|---|---|
+| Android (máy thật, camera trước) | ✅ Hỗ trợ đầy đủ |
+| Web (TV, laptop, PC có webcam, tablet / điện thoại) | 🚧 Đang phát triển |
+
+---
+
+## 🚀 Chạy dự án
+
+**Yêu cầu:** Flutter 3.44+ (Dart 3.12+), thiết bị Android 7.0+ (minSdk 24) có camera trước.
+
+```bash
+flutter pub get
+flutter run            # chạy trên thiết bị Android đang kết nối
+flutter build apk      # build bản cài đặt APK
 ```
 
-CÃ³ thá»ƒ cháº¡y trá»±c tiáº¿p trÃªn:
-- **Thiáº¿t bá»‹ Android tháº­t** (Ä‘Ã£ cáº¥p quyá»n camera trÆ°á»›c)
-- **Windows Desktop / Web** (cháº¡y cháº¿ Ä‘á»™ phÃ­m áº£o / simulator)
+Lần đầu mở app cần **cấp quyền camera**. Nên chơi ở nơi đủ sáng, đặt máy ngang và đứng cách camera khoảng 0,5-1 m (chế độ 2 tay: 1-1,5 m).
+
+Tạo lại icon ứng dụng từ logo:
+
+```bash
+dart run flutter_launcher_icons
+```
+
+---
+
+## 🗂️ Cấu trúc thư mục
+
+```
+lib/
+├── main.dart
+├── core/            # Hằng số dùng chung
+├── motion/          # Camera + AI (ML Kit, MediaPipe) và xử lý cử chỉ
+├── services/        # Âm thanh (SoundService)
+├── games/
+│   ├── penalty_kick/     # Fruits Kick
+│   ├── egg_smasher/      # Egg Smasher
+│   └── goalkeeper_hero/  # Goalkeeper Hero (2 tay)
+└── ui/
+    ├── screens/     # Splash, menu chính, sảnh 2 tay
+    └── widgets/     # UI phong cách trẻ em, Camera Setup, PiP, linh vật...
+assets/
+├── audio/           # Hiệu ứng âm thanh
+├── words/           # Giọng đọc từ vựng (.mp3)
+├── images/          # Logo, ảnh nền, linh vật
+└── animations/      # Lottie splash
+docs/                # Tài liệu thiết kế (kế hoạch game 2 tay)
+```
+
+> `lib/games/flappy_mouth` và `lib/games/sky_chomp` là game cũ, chưa có trên menu.
