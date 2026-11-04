@@ -5,8 +5,8 @@
     "display": "standalone",
     "background_color": "#070830",
     "theme_color": "#070830",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "description": "Enspire Digital: motion-controlled English learning games for kids. Play with your face and hands!",
+    "orientation": "landscape",
     "prefer_related_applications": false,
     "icons": [
         {
