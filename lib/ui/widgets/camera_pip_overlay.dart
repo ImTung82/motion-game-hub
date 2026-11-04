@@ -1,4 +1,3 @@
-import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import '../../core/constants.dart';
 import '../../motion/face_motion_controller.dart';
@@ -207,7 +206,7 @@ class _CameraPipOverlayState extends State<CameraPipOverlay> {
                     width: pipWidth,
                     child: LayoutBuilder(
                       builder: (context, constraints) {
-                        final rawSize = ctrl.cameraController?.value.previewSize;
+                        final rawSize = ctrl.previewSize;
                         final childW = isRotated90or270
                             ? (rawSize?.height ?? constraints.maxHeight)
                             : (rawSize?.width ?? constraints.maxWidth);
@@ -219,7 +218,7 @@ class _CameraPipOverlayState extends State<CameraPipOverlay> {
                           fit: StackFit.expand,
                           children: [
                             // Camera Preview tràn viền 16:9
-                            if (ctrl.cameraController != null && ctrl.cameraController!.value.isInitialized)
+                            if (ctrl.hasPreview)
                               FittedBox(
                                 fit: BoxFit.cover,
                                 child: SizedBox(
@@ -227,7 +226,7 @@ class _CameraPipOverlayState extends State<CameraPipOverlay> {
                                   height: childH,
                                   child: RotatedBox(
                                     quarterTurns: ctrl.cameraRotationQuarterTurns,
-                                    child: CameraPreview(ctrl.cameraController!),
+                                    child: ctrl.buildPreview(),
                                   ),
                                 ),
                               )

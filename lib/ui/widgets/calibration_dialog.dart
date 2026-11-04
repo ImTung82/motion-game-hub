@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 import '../../services/sound_service.dart';
-import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import '../../motion/face_motion_controller.dart';
 import '../../motion/motion_state.dart';
@@ -297,7 +296,7 @@ class _CalibrationDialogState extends State<CalibrationDialog> {
   // KHUNG CAMERA 16:9 (preview + chấm theo dõi + thanh trạng thái)
   // ==========================================
   Widget _buildCameraFrame(FaceMotionController ctrl, MotionState state) {
-    final hasCam = ctrl.cameraController != null && ctrl.cameraController!.value.isInitialized;
+    final hasCam = ctrl.hasPreview;
     final isDualHand = _activeMode == CalibrationMode.dualHand;
     final isSingleHand = _activeMode == CalibrationMode.singleHand;
     final isDetected = isDualHand ? (state.handsCount > 0) : (isSingleHand ? state.handDetected : state.faceDetected);
@@ -335,7 +334,7 @@ class _CalibrationDialogState extends State<CalibrationDialog> {
           borderRadius: BorderRadius.circular(16),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final rawSize = ctrl.cameraController?.value.previewSize;
+              final rawSize = ctrl.previewSize;
               final childW = isRotated90or270 ? (rawSize?.height ?? constraints.maxHeight) : (rawSize?.width ?? constraints.maxWidth);
               final childH = isRotated90or270 ? (rawSize?.width ?? constraints.maxWidth) : (rawSize?.height ?? constraints.maxHeight);
 
@@ -351,7 +350,7 @@ class _CalibrationDialogState extends State<CalibrationDialog> {
                         child: SizedBox(
                           width: childW,
                           height: childH,
-                          child: RotatedBox(quarterTurns: ctrl.cameraRotationQuarterTurns, child: CameraPreview(ctrl.cameraController!)),
+                          child: RotatedBox(quarterTurns: ctrl.cameraRotationQuarterTurns, child: ctrl.buildPreview()),
                         ),
                       ),
                     )
