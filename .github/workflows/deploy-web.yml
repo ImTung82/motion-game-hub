@@ -1,0 +1,53 @@
+# Build bản web (wasm) và deploy lên Firebase Hosting (project motion-game-hub-web)
+# - push lên main  -> deploy bản chính: https://motion-game-hub-web.web.app
+# - mở / cập nhật PR -> deploy bản xem trước (URL tạm 7 ngày, bot comment link vào PR)
+# Cần secret FIREBASE_SERVICE_ACCOUNT_MOTION_GAME_HUB_WEB (key JSON của service account có quyền Hosting)
+name: Deploy web
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.6
+          cache: true
+
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter build web --wasm --release
+
+      - name: Deploy preview (PR)
+        if: github.event_name == 'pull_request'
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MOTION_GAME_HUB_WEB }}
+          projectId: motion-game-hub-web
+          expires: 7d
+
+      - name: Deploy live (main)
+        if: github.event_name != 'pull_request'
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_MOTION_GAME_HUB_WEB }}
+          projectId: motion-game-hub-web
+          channelId: live
