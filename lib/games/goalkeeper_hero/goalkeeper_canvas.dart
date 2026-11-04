@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import '../../ui/widgets/text_painter_cache.dart';
 import 'goalkeeper_engine.dart';
 import 'goalkeeper_models.dart';
 
@@ -266,11 +267,13 @@ class _GoalkeeperPainter extends CustomPainter {
     // Thân mặc áo đấu đỏ, số 10
     canvas.drawCircle(Offset.zero, 14 * k, Paint()..color = const Color(0xFFE53935));
     canvas.drawRect(Rect.fromCenter(center: Offset(0, -2 * k), width: 26 * k, height: 3 * k), Paint()..color = Colors.white);
-    final numberPainter = TextPainter(
-      text: TextSpan(text: '10', style: TextStyle(color: Colors.white, fontSize: 9 * k, fontWeight: FontWeight.w900)),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    numberPainter.paint(canvas, Offset(-numberPainter.width / 2, 2 * k));
+    // Số áo layout 1 lần ở cỡ gốc (u) rồi phóng theo k bằng canvas.scale (k đổi mỗi khung khi cầu thủ chạy đà)
+    final numberPainter = TextPainterCache.get('10', TextStyle(color: Colors.white, fontSize: 9 * u, fontWeight: FontWeight.w900));
+    canvas.save();
+    canvas.translate(0, 2 * k);
+    canvas.scale(k / u);
+    numberPainter.paint(canvas, Offset(-numberPainter.width / 2, 0));
+    canvas.restore();
 
     // Đầu gấu
     canvas.drawCircle(Offset(-10 * k, -30 * k), 5 * k, furPaint);
@@ -429,22 +432,18 @@ class _GoalkeeperPainter extends CustomPainter {
   void _drawWordBadge(Canvas canvas, KeeperLayout l, Offset bottomCenter, WordItem word, double z) {
     final scale = (z * 1.1).clamp(0.65, 1.0) * l.u;
 
-    final emojiPainter = TextPainter(
-      text: TextSpan(text: word.emoji, style: TextStyle(fontSize: 30 * scale)),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    final labelPainter = TextPainter(
-      text: TextSpan(
-        text: word.label,
-        style: TextStyle(color: const Color(0xFF1A237E), fontSize: 12 * scale, fontWeight: FontWeight.w900, letterSpacing: 0.5),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
+    // Chữ layout 1 lần ở cỡ gốc (l.u) rồi phóng theo độ sâu bằng canvas.scale: cỡ đổi mỗi khung khi bóng bay tới
+    final double f = scale / l.u;
+    final emojiPainter = TextPainterCache.get(word.emoji, TextStyle(fontSize: 30 * l.u));
+    final labelPainter = TextPainterCache.get(
+      word.label,
+      TextStyle(color: const Color(0xFF1A237E), fontSize: 12 * l.u, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+    );
 
     final double padX = 10 * scale;
     final double padY = 4 * scale;
-    final double badgeW = math.max(emojiPainter.width, labelPainter.width) + padX * 2;
-    final double badgeH = emojiPainter.height + labelPainter.height + padY * 2;
+    final double badgeW = math.max(emojiPainter.width, labelPainter.width) * f + padX * 2;
+    final double badgeH = (emojiPainter.height + labelPainter.height) * f + padY * 2;
     final rect = Rect.fromLTWH(bottomCenter.dx - badgeW / 2, bottomCenter.dy - badgeH, badgeW, badgeH);
     final rrect = RRect.fromRectAndRadius(rect, Radius.circular(16 * scale));
 
@@ -464,8 +463,12 @@ class _GoalkeeperPainter extends CustomPainter {
         ..strokeWidth = 3 * scale,
     );
 
-    emojiPainter.paint(canvas, Offset(rect.center.dx - emojiPainter.width / 2, rect.top + padY));
-    labelPainter.paint(canvas, Offset(rect.center.dx - labelPainter.width / 2, rect.top + padY + emojiPainter.height));
+    canvas.save();
+    canvas.translate(rect.center.dx, rect.top + padY);
+    canvas.scale(f);
+    emojiPainter.paint(canvas, Offset(-emojiPainter.width / 2, 0));
+    labelPainter.paint(canvas, Offset(-labelPainter.width / 2, emojiPainter.height));
+    canvas.restore();
   }
 
   void _drawGloves(Canvas canvas, KeeperLayout l) {
@@ -566,19 +569,16 @@ class _GoalkeeperPainter extends CustomPainter {
     canvas.drawRRect(thumb, palmBorder);
 
     // Nhãn LEFT / RIGHT bên dưới
-    final labelPainter = TextPainter(
-      text: TextSpan(
-        text: label,
-        style: TextStyle(
-          color: Colors.white.withValues(alpha: opacity),
-          fontSize: 12 * u,
-          fontWeight: FontWeight.w900,
-          letterSpacing: 0.8,
-          shadows: const [Shadow(color: Colors.black54, offset: Offset(0, 2))],
-        ),
+    final labelPainter = TextPainterCache.get(
+      label,
+      TextStyle(
+        color: Colors.white.withValues(alpha: opacity),
+        fontSize: 12 * u,
+        fontWeight: FontWeight.w900,
+        letterSpacing: 0.8,
+        shadows: const [Shadow(color: Colors.black54, offset: Offset(0, 2))],
       ),
-      textDirection: TextDirection.ltr,
-    )..layout();
+    );
     labelPainter.paint(canvas, Offset(-labelPainter.width / 2, gloveSize * 0.56));
 
     canvas.restore();
@@ -602,11 +602,14 @@ class _GoalkeeperPainter extends CustomPainter {
         );
         canvas.restore();
       } else if (p.emoji != null) {
-        final painter = TextPainter(
-          text: TextSpan(text: p.emoji, style: TextStyle(fontSize: p.radius * 2.8 * progress * u)),
-          textDirection: TextDirection.ltr,
-        )..layout();
-        painter.paint(canvas, Offset(pos.dx - painter.width / 2, pos.dy - painter.height / 2));
+        // Emoji co dần theo progress: layout 1 lần ở cỡ đầy đủ rồi canvas.scale
+        if (progress <= 0) continue;
+        final painter = TextPainterCache.get(p.emoji!, TextStyle(fontSize: p.radius * 2.8 * u));
+        canvas.save();
+        canvas.translate(pos.dx, pos.dy);
+        canvas.scale(progress);
+        painter.paint(canvas, Offset(-painter.width / 2, -painter.height / 2));
+        canvas.restore();
       } else {
         canvas.drawCircle(pos, p.radius * progress * u, Paint()..color = p.color.withValues(alpha: progress));
       }

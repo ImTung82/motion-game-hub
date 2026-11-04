@@ -6,6 +6,7 @@ import '../../services/sound_service.dart';
 import '../widgets/calibration_dialog.dart';
 import '../widgets/company_logo_badge.dart';
 import '../widgets/kid_ui.dart';
+import '../widgets/listenable_selector.dart';
 import '../widgets/rabbit_mascot.dart';
 import '../../games/goalkeeper_hero/goalkeeper_screen.dart';
 
@@ -72,8 +73,10 @@ class _DualHandHubScreenState extends State<DualHandHubScreen> {
           SafeArea(
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 20 * s, vertical: 12 * s),
-              child: ListenableBuilder(
+              // Chỉ build lại khi thứ đang hiển thị đổi (controller báo theo từng khung camera, ~30 lần/giây)
+              child: ListenableSelector(
                 listenable: widget.motionController,
+                selector: () => (widget.motionController.state.handsCount, widget.motionController.state.isClapTriggered),
                 builder: (context, _) {
                   final ctrl = widget.motionController;
                   final state = ctrl.state;
@@ -106,8 +109,11 @@ class _DualHandHubScreenState extends State<DualHandHubScreen> {
                         flex: 62,
                         child: LayoutBuilder(
                           builder: (context, constraints) {
-                            // Chiều rộng mỗi thẻ ~ 280-320px
-                            final cardW = (300.0 * s).clamp(240.0, 340.0);
+                            // Điện thoại: thẻ ~300px như cũ. Màn rộng (laptop, TV): to bằng thẻ ở hub chính
+                            // (1/2 cột phải, tối đa 360*s) thay vì kẹt ở 340px trông bé tí giữa cột
+                            final phoneW = (300.0 * s).clamp(240.0, 340.0);
+                            final wideW = math.min((constraints.maxWidth - 14 * s) / 2, 360.0 * s);
+                            final cardW = math.min(math.max(phoneW, wideW), constraints.maxWidth);
                             return SingleChildScrollView(
                               scrollDirection: Axis.horizontal,
                               physics: const BouncingScrollPhysics(),

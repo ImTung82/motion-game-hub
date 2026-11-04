@@ -4,6 +4,7 @@ import '../../core/constants.dart';
 import '../../motion/face_motion_controller.dart';
 import '../../ui/widgets/calibration_dialog.dart';
 import '../../ui/widgets/camera_pip_overlay.dart';
+import '../../ui/widgets/listenable_selector.dart';
 import 'flappy_canvas.dart';
 import 'flappy_engine.dart';
 
@@ -68,10 +69,13 @@ class _FlappyMouthScreenState extends State<FlappyMouthScreen> with SingleTicker
       body: Stack(
         fit: StackFit.expand,
         children: [
-          CustomPaint(
-            painter: FlappyCanvasPainter(
-              engine: _engine,
-              animationValue: _animationValue,
+          // RepaintBoundary: canvas vẽ lại mỗi khung, HUD phía trên không phải vẽ lại theo
+          RepaintBoundary(
+            child: CustomPaint(
+              painter: FlappyCanvasPainter(
+                engine: _engine,
+                animationValue: _animationValue,
+              ),
             ),
           ),
 
@@ -80,8 +84,9 @@ class _FlappyMouthScreenState extends State<FlappyMouthScreen> with SingleTicker
               alignment: Alignment.topCenter,
               child: Padding(
                 padding: const EdgeInsets.only(top: 12),
-                child: ListenableBuilder(
+                child: ListenableSelector(
                   listenable: _engine,
+                  selector: () => _engine.score,
                   builder: (context, _) => Text(
                     '${_engine.score}',
                     style: const TextStyle(
@@ -102,8 +107,9 @@ class _FlappyMouthScreenState extends State<FlappyMouthScreen> with SingleTicker
           ),
 
           // Nút chạm vỗ cánh (Mặc định ẩn, chỉ hiện nếu bật trong Cài đặt)
-          ListenableBuilder(
+          ListenableSelector(
             listenable: widget.motionController,
+            selector: () => widget.motionController.showTouchControls,
             builder: (context, _) {
               if (!widget.motionController.showTouchControls) return const SizedBox.shrink();
               return Positioned(
@@ -138,8 +144,9 @@ class _FlappyMouthScreenState extends State<FlappyMouthScreen> with SingleTicker
             },
           ),
 
-          ListenableBuilder(
+          ListenableSelector(
             listenable: _engine,
+            selector: () => (_engine.isGameOver, _engine.score, _engine.highScore),
             builder: (context, _) {
               if (!_engine.isGameOver) return const SizedBox.shrink();
 

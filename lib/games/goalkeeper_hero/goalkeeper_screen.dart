@@ -8,6 +8,7 @@ import '../../ui/widgets/camera_pip_overlay.dart';
 import '../../ui/widgets/company_logo_badge.dart';
 import '../../ui/widgets/kid_ui.dart';
 import '../../ui/widgets/lives_hearts.dart';
+import '../../ui/widgets/listenable_selector.dart';
 import '../../ui/widgets/rabbit_mascot.dart';
 import '../../ui/widgets/score_fly_layer.dart';
 import 'goalkeeper_canvas.dart';
@@ -180,11 +181,14 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
               builder: (context, constraints) {
                 // Engine tính va chạm theo pixel nên cần biết kích thước vùng vẽ
                 _engine.layout = KeeperLayout(constraints.biggest);
-                return AnimatedBuilder(
-                  animation: _engine,
-                  builder: (context, _) => GoalkeeperCanvas(
-                    engine: _engine,
-                    ballImage: _ballImage,
+                // RepaintBoundary: canvas vẽ lại mỗi khung, HUD phía trên không phải vẽ lại theo
+                return RepaintBoundary(
+                  child: AnimatedBuilder(
+                    animation: _engine,
+                    builder: (context, _) => GoalkeeperCanvas(
+                      engine: _engine,
+                      ballImage: _ballImage,
+                    ),
                   ),
                 );
               },
@@ -206,8 +210,9 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
           Positioned(
             left: pad.left + 12 * s,
             bottom: pad.bottom + 8 * s,
-            child: ListenableBuilder(
+            child: ListenableSelector(
               listenable: _engine,
+              selector: () => (_engine.phase, _engine.streak, _engine.lives),
               builder: (context, _) => _buildMascot(s),
             ),
           ),
@@ -226,8 +231,17 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
           // 4. CHỜ GIƠ 2 TAY / ĐẾM NGƯỢC 3-2-1 / LỜI NHẮC KHI MẤT TAY
           Positioned.fill(
             child: IgnorePointer(
-              child: ListenableBuilder(
+              child: ListenableSelector(
                 listenable: _engine,
+                selector: () => (
+                  _engine.phase,
+                  _engine.countdownNumber,
+                  _engine.countdownFraction,
+                  _engine.goFlash,
+                  _engine.leftGlove.detected,
+                  _engine.rightGlove.detected,
+                  widget.motionController.state.handsCount == 0,
+                ),
                 builder: (context, _) => _buildPhaseOverlay(s, pad),
               ),
             ),
@@ -250,8 +264,9 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
           ),
 
           // 7. CHỌN MỨC ĐỘ & CHỦ ĐỀ TRƯỚC KHI CHƠI
-          ListenableBuilder(
+          ListenableSelector(
             listenable: _engine,
+            selector: () => (_engine.phase, _engine.difficulty, _engine.topic),
             builder: (context, _) {
               if (_engine.phase != KeeperPhase.setup) return const SizedBox.shrink();
               return _buildSetupDialog(s);
@@ -259,8 +274,9 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
           ),
 
           // 8. TẠM DỪNG (PAUSED DIALOG)
-          ListenableBuilder(
+          ListenableSelector(
             listenable: _engine,
+            selector: () => _engine.isPaused,
             builder: (context, _) {
               if (!_engine.isPaused) return const SizedBox.shrink();
               return KidDialog(
@@ -291,8 +307,17 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
           ),
 
           // 9. KẾT THÚC (GAME OVER DIALOG)
-          ListenableBuilder(
+          ListenableSelector(
             listenable: _engine,
+            selector: () => (
+              _engine.isGameOver,
+              _engine.score,
+              _engine.highScore,
+              _engine.isNewHighScore,
+              _engine.ballsSaved,
+              _engine.ballsCaught,
+              _engine.savedWords.length,
+            ),
             builder: (context, _) {
               if (!_engine.isGameOver) return const SizedBox.shrink();
               return _buildGameOverDialog(s);
@@ -736,8 +761,9 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
         SizedBox(width: 8 * s),
 
         // Nút Bật/Tắt Camera PiP
-        ListenableBuilder(
+        ListenableSelector(
           listenable: widget.motionController,
+          selector: () => widget.motionController.showCameraPip,
           builder: (context, _) {
             final pipOn = widget.motionController.showCameraPip;
             return KidIconButton(

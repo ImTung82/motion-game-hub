@@ -8,6 +8,7 @@ import '../../ui/widgets/calibration_dialog.dart';
 import '../../ui/widgets/camera_pip_overlay.dart';
 import '../../ui/widgets/company_logo_badge.dart';
 import '../../ui/widgets/kid_ui.dart';
+import '../../ui/widgets/listenable_selector.dart';
 import '../../ui/widgets/rabbit_mascot.dart';
 import '../../ui/widgets/lives_hearts.dart';
 import '../../ui/widgets/ready_gate.dart';
@@ -143,11 +144,14 @@ class _PenaltyScreenState extends State<PenaltyScreen> with SingleTickerProvider
         fit: StackFit.expand,
         children: [
           // 1. Sân bóng, khán đài & khung thành
-          CustomPaint(
-            painter: PenaltyCanvasPainter(
-              engine: _engine,
-              animationValue: _animationValue,
-              ballImage: _ballImage,
+          // RepaintBoundary: canvas vẽ lại mỗi khung, HUD phía trên không phải vẽ lại theo
+          RepaintBoundary(
+            child: CustomPaint(
+              painter: PenaltyCanvasPainter(
+                engine: _engine,
+                animationValue: _animationValue,
+                ballImage: _ballImage,
+              ),
             ),
           ),
 
@@ -174,8 +178,9 @@ class _PenaltyScreenState extends State<PenaltyScreen> with SingleTickerProvider
           _buildRabbitMascot(s, pad),
 
           // 6. Nút sút cảm ứng (mặc định ẩn, chỉ hiện nếu bật trong Cài đặt)
-          ListenableBuilder(
+          ListenableSelector(
             listenable: widget.motionController,
+            selector: () => widget.motionController.showTouchControls,
             builder: (context, _) {
               if (!widget.motionController.showTouchControls) return const SizedBox.shrink();
               return Positioned(
@@ -225,8 +230,9 @@ class _PenaltyScreenState extends State<PenaltyScreen> with SingleTickerProvider
           ),
 
           // 7. Tạm dừng
-          ListenableBuilder(
+          ListenableSelector(
             listenable: _engine,
+            selector: () => _engine.isPaused,
             builder: (context, _) {
               if (!_engine.isPaused) return const SizedBox.shrink();
               return KidDialog(
@@ -257,8 +263,9 @@ class _PenaltyScreenState extends State<PenaltyScreen> with SingleTickerProvider
           ),
 
           // 8. Kết thúc (Endless mode): lời khen tích cực cho bé, kể cả khi không phá kỷ lục
-          ListenableBuilder(
+          ListenableSelector(
             listenable: _engine,
+            selector: () => (_engine.isGameOver, _engine.isNewHighScore, _engine.score, _engine.goals, _engine.highScore),
             builder: (context, _) {
               if (!_engine.isGameOver) return const SizedBox.shrink();
               final isRecord = _engine.isNewHighScore;
@@ -320,8 +327,9 @@ class _PenaltyScreenState extends State<PenaltyScreen> with SingleTickerProvider
       top: pad.top + _hudMargin * s,
       left: pad.left + _hudMargin * s,
       right: pad.right + _hudMargin * s,
-      child: ListenableBuilder(
+      child: ListenableSelector(
         listenable: _engine,
+        selector: () => (_engine.lives, _engine.goals, _engine.streak, _engine.isPaused),
         builder: (context, _) {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -383,8 +391,9 @@ class _PenaltyScreenState extends State<PenaltyScreen> with SingleTickerProvider
               SizedBox(width: gap),
 
               // ẨN/HIỆN CAMERA
-              ListenableBuilder(
+              ListenableSelector(
                 listenable: widget.motionController,
+                selector: () => widget.motionController.showCameraPip,
                 builder: (context, _) {
                   final bool isCamVisible = widget.motionController.showCameraPip;
                   return KidIconButton(
@@ -443,8 +452,9 @@ class _PenaltyScreenState extends State<PenaltyScreen> with SingleTickerProvider
       // Căn giữa thỏ trên logo
       left: pad.left + _hudMargin * s + math.max(0.0, (logoW - rabbitW) / 2),
       bottom: pad.bottom + 8 * s + _logoH * s + 2,
-      child: ListenableBuilder(
+      child: ListenableSelector(
         listenable: _engine,
+        selector: () => (_engine.currentTargetFruit, _engine.currentOutcome, _engine.bannerSubtitle),
         builder: (context, _) {
           final target = _engine.currentTargetFruit;
           if (target == null) return const SizedBox.shrink();

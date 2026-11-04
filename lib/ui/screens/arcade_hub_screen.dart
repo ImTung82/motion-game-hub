@@ -8,6 +8,7 @@ import '../../motion/motion_state.dart';
 import '../widgets/calibration_dialog.dart';
 import '../widgets/company_logo_badge.dart';
 import '../widgets/kid_ui.dart';
+import '../widgets/listenable_selector.dart';
 import '../widgets/rabbit_mascot.dart';
 import 'dual_hand_hub_screen.dart';
 
@@ -59,8 +60,15 @@ class _ArcadeHubScreenState extends State<ArcadeHubScreen> {
           SafeArea(
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 20 * s, vertical: 12 * s),
-              child: ListenableBuilder(
+              // Chỉ build lại khi thứ đang hiển thị đổi (controller báo theo từng khung camera, ~30 lần/giây)
+              child: ListenableSelector(
                 listenable: widget.motionController,
+                selector: () {
+                  final ctrl = widget.motionController;
+                  final state = ctrl.state;
+                  return (ctrl.inputMode, ctrl.cameraAvailable, state.faceDetected, state.handDetected,
+                      state.isChomping, state.isHandFist, state.tiltDirection);
+                },
                 builder: (context, _) {
                   final ctrl = widget.motionController;
                   final state = ctrl.state;

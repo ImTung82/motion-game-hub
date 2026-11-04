@@ -5,6 +5,7 @@ import '../../motion/face_motion_controller.dart';
 import '../../motion/motion_state.dart';
 import '../../ui/widgets/calibration_dialog.dart';
 import '../../ui/widgets/camera_pip_overlay.dart';
+import '../../ui/widgets/listenable_selector.dart';
 import 'sky_chomp_canvas.dart';
 import 'sky_chomp_engine.dart';
 
@@ -69,10 +70,13 @@ class _SkyChompScreenState extends State<SkyChompScreen> with SingleTickerProvid
       body: Stack(
         fit: StackFit.expand,
         children: [
-          CustomPaint(
-            painter: SkyChompCanvasPainter(
-              engine: _engine,
-              animationValue: _animationValue,
+          // RepaintBoundary: canvas vẽ lại mỗi khung, HUD phía trên không phải vẽ lại theo
+          RepaintBoundary(
+            child: CustomPaint(
+              painter: SkyChompCanvasPainter(
+                engine: _engine,
+                animationValue: _animationValue,
+              ),
             ),
           ),
 
@@ -84,16 +88,18 @@ class _SkyChompScreenState extends State<SkyChompScreen> with SingleTickerProvid
           ),
 
           // Phím ảo cảm ứng (Mặc định ẩn, chỉ hiện nếu bật trong Cài đặt)
-          ListenableBuilder(
+          ListenableSelector(
             listenable: widget.motionController,
+            selector: () => widget.motionController.showTouchControls,
             builder: (context, _) {
               if (!widget.motionController.showTouchControls) return const SizedBox.shrink();
               return _buildDualThumbControls();
             },
           ),
 
-          ListenableBuilder(
+          ListenableSelector(
             listenable: _engine,
+            selector: () => _engine.isPaused,
             builder: (context, _) {
               if (!_engine.isPaused) return const SizedBox.shrink();
               return Container(
@@ -114,8 +120,9 @@ class _SkyChompScreenState extends State<SkyChompScreen> with SingleTickerProvid
             },
           ),
 
-          ListenableBuilder(
+          ListenableSelector(
             listenable: _engine,
+            selector: () => (_engine.isGameOver, _engine.score, _engine.totalChomps, _engine.totalDodges, _engine.maxCombo),
             builder: (context, _) {
               if (!_engine.isGameOver) return const SizedBox.shrink();
               return _buildGameOverDialog();
@@ -130,8 +137,9 @@ class _SkyChompScreenState extends State<SkyChompScreen> with SingleTickerProvid
     return Positioned(
       top: 10,
       left: 12,
-      child: ListenableBuilder(
+      child: ListenableSelector(
         listenable: _engine,
+        selector: () => (_engine.score, _engine.combo, _engine.player.lives, _engine.feverEnergy, _engine.isFeverMode),
         builder: (context, _) {
           return Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),

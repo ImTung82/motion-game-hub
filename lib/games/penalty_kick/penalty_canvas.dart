@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import '../../ui/widgets/text_painter_cache.dart';
 import 'penalty_engine.dart';
 
 class PenaltyCanvasPainter extends CustomPainter {
@@ -97,8 +98,9 @@ class PenaltyCanvasPainter extends CustomPainter {
     final r = h * 0.017;
     final spacing = r * 2.7;
     const rows = 3;
-    final eye = Paint()..color = const Color(0xFF4E342E);
-    final skin = Paint()..color = const Color(0xFFFFE0C2);
+    final atlas = _fanAtlasFor(r);
+    final transforms = <RSTransform>[];
+    final sprites = <Rect>[];
     for (int row = 0; row < rows; row++) {
       final y = standTop + h * 0.03 + row * (standBottom - standTop - h * 0.04) / (rows - 1);
       final offsetX = row.isOdd ? spacing / 2 : 0.0;
@@ -112,15 +114,12 @@ class PenaltyCanvasPainter extends CustomPainter {
         } else {
           dy = -math.sin(animationValue * 3 + seed).abs() * r * 0.18;
         }
-        final color = _fanColors[seed % _fanColors.length];
-        final c = Offset(x, y + dy);
-        canvas.drawCircle(c.translate(0, r * 1.25), r * 0.95, Paint()..color = color.withValues(alpha: 0.85)); // thân
-        canvas.drawCircle(c, r, skin); // mặt
-        canvas.drawCircle(c.translate(0, -r * 0.55), r * 0.75, Paint()..color = color); // mũ
-        canvas.drawCircle(c.translate(-r * 0.35, r * 0.05), r * 0.13, eye);
-        canvas.drawCircle(c.translate(r * 0.35, r * 0.05), r * 0.13, eye);
+        final colorIndex = seed % _fanColors.length;
+        transforms.add(RSTransform(1 / atlas.dpr, 0, x - atlas.anchorX / atlas.dpr, y + dy - atlas.anchorY / atlas.dpr));
+        sprites.add(Rect.fromLTWH(colorIndex * atlas.cellW, 0, atlas.cellW, atlas.cellH));
       }
     }
+    canvas.drawAtlas(atlas.image, transforms, sprites, null, null, null, Paint()..filterQuality = FilterQuality.low);
 
     // Hàng rào cầu vồng dọc mép sân
     final fenceTop = h * 0.335, fenceBottom = h * 0.385;
@@ -136,6 +135,44 @@ class PenaltyCanvasPainter extends CustomPainter {
         Paint()..color = Colors.white.withValues(alpha: 0.45),
       );
     }
+  }
+
+  // Khán đài ~120 bạn x 5 hình tròn = ~600 lệnh vẽ mỗi khung (web: ~20% luồng chính). Vẽ sẵn mỗi màu áo
+  // 1 hình (theo đúng độ phân giải màn hình) rồi vẽ cả khán đài bằng 1 lệnh drawAtlas.
+  static _FanAtlas? _fanAtlas;
+
+  static _FanAtlas _fanAtlasFor(double r) {
+    final dpr = ui.PlatformDispatcher.instance.implicitView?.devicePixelRatio ?? 1.0;
+    final cached = _fanAtlas;
+    if (cached != null && cached.r == r && cached.dpr == dpr) return cached;
+
+    // Mỗi ô: rộng 2r, từ đỉnh mũ (-1.3r) tới đáy thân (+2.2r), chừa 2px trong suốt để không lem sang ô bên
+    final cellW = ((2 * r + 4) * dpr).ceilToDouble();
+    final cellH = ((3.5 * r + 4) * dpr).ceilToDouble();
+    final anchorX = cellW / 2;
+    final anchorY = (1.3 * r + 2) * dpr;
+    final eye = Paint()..color = const Color(0xFF4E342E);
+    final skin = Paint()..color = const Color(0xFFFFE0C2);
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    for (int k = 0; k < _fanColors.length; k++) {
+      final color = _fanColors[k];
+      canvas.save();
+      canvas.translate(k * cellW + anchorX, anchorY);
+      canvas.scale(dpr);
+      const c = Offset.zero;
+      canvas.drawCircle(c.translate(0, r * 1.25), r * 0.95, Paint()..color = color.withValues(alpha: 0.85)); // thân
+      canvas.drawCircle(c, r, skin); // mặt
+      canvas.drawCircle(c.translate(0, -r * 0.55), r * 0.75, Paint()..color = color); // mũ
+      canvas.drawCircle(c.translate(-r * 0.35, r * 0.05), r * 0.13, eye);
+      canvas.drawCircle(c.translate(r * 0.35, r * 0.05), r * 0.13, eye);
+      canvas.restore();
+    }
+    final picture = recorder.endRecording();
+    final image = picture.toImageSync((cellW * _fanColors.length).toInt(), cellH.toInt());
+    picture.dispose();
+    cached?.image.dispose();
+    return _fanAtlas = _FanAtlas(image, r, dpr, cellW, cellH, anchorX, anchorY);
   }
 
   void _drawSmilingSun(Canvas canvas, Offset c, double r) {
@@ -348,12 +385,10 @@ class PenaltyCanvasPainter extends CustomPainter {
       canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(12)), borderPaint);
 
       // Chỉ hiển thị hình hoa quả, to và căn giữa ô
-      final emojiSpan = TextSpan(
-        text: target.fruit.emoji,
-        style: TextStyle(fontSize: (math.min(boardW, boardH) * 0.62).clamp(24.0, 72.0)),
+      final emojiTp = TextPainterCache.get(
+        target.fruit.emoji,
+        TextStyle(fontSize: (math.min(boardW, boardH) * 0.62).clamp(24.0, 72.0)),
       );
-      final emojiTp = TextPainter(text: emojiSpan, textDirection: TextDirection.ltr);
-      emojiTp.layout();
       emojiTp.paint(canvas, Offset(-emojiTp.width / 2, -emojiTp.height / 2));
 
       canvas.restore();
@@ -496,4 +531,15 @@ class PenaltyCanvasPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant PenaltyCanvasPainter oldDelegate) => true;
+}
+
+/// Ảnh chứa sẵn 1 cổ động viên mỗi màu áo (xem PenaltyCanvasPainter._fanAtlasFor)
+class _FanAtlas {
+  final ui.Image image;
+  final double r; // bán kính mặt (px logic) lúc vẽ
+  final double dpr;
+  final double cellW, cellH; // kích thước 1 ô (px ảnh)
+  final double anchorX, anchorY; // tâm mặt trong ô (px ảnh)
+
+  const _FanAtlas(this.image, this.r, this.dpr, this.cellW, this.cellH, this.anchorX, this.anchorY);
 }

@@ -71,6 +71,27 @@ flutter run            # chạy trên thiết bị Android đang kết nối
 flutter build apk      # build bản cài đặt APK
 ```
 
+**Web** (camera chỉ chạy trên `localhost` hoặc HTTPS):
+
+```bash
+flutter run -d chrome --wasm     # chạy thử trên Chrome
+flutter build web --wasm         # build ra build/web
+```
+
+Luôn build với `--wasm`: game mượt gấp ~2 lần bản JS (đo trên laptop: ~120 so với ~60 FPS). Trình duyệt không hỗ trợ WasmGC (VD: Chrome đời cũ trên TV) tự chạy bản JS đi kèm. Máy chủ web cần gửi 2 header sau để Flutter vẽ trên luồng riêng (thiếu thì vẫn chạy nhưng chậm hơn):
+
+```
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+```
+
+Deploy lên Firebase Hosting (project `motion-game-hub-web`, header & cache đã cấu hình trong `firebase.json`):
+
+```bash
+flutter build web --wasm
+firebase deploy --only hosting   # -> https://motion-game-hub-web.web.app
+```
+
 Lần đầu mở app cần **cấp quyền camera**. Nên chơi ở nơi đủ sáng, đặt máy ngang và đứng cách camera khoảng 0,5-1 m (chế độ 2 tay: 1-1,5 m).
 
 Tạo lại icon ứng dụng từ logo:
