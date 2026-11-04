@@ -1,4 +1,4 @@
-﻿# 🕹️ Motion Game Hub
+# 🕹️ Motion Game Hub
 
 Bộ game học tiếng Anh cho trẻ mẫu giáo của **Enspire Digital**, điều khiển hoàn toàn bằng **cử chỉ khuôn mặt và bàn tay** qua camera trước. Bé nghe từ vựng, rồi nghiêng đầu, lướt tay, nắm tay hoặc vỗ tay để chọn đúng hình.
 
