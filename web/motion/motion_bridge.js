@@ -1,69 +1,89 @@
-// Cầu nối camera + MediaPipe Tasks Vision cho bản Web.
+// Cầu nối camera + MediaPipe cho bản Web.
 // Flutter (lib/motion/backend/motion_backend_web.dart) gọi window.motionBridge qua dart:js_interop.
-import { FilesetResolver, HandLandmarker, FaceLandmarker } from './mediapipe/vision_bundle_esm.js';
+// Luồng chính chỉ lo camera & gửi khung hình; AI chạy trong motion_worker.js (luồng riêng)
+// để Flutter có trọn luồng chính mà vẽ game mượt.
 
-const base = new URL('.', import.meta.url);
-const WASM_PATH = new URL('mediapipe/wasm', base).href;
-const MODEL_URLS = {
-  hand: new URL('models/hand_landmarker.task', base).href,
-  face: new URL('models/face_landmarker.task', base).href,
-};
-
-// ~30 FPS; máy chậm (1 lần nhận diện > 40ms) tự hạ xuống ~15 FPS để không ì cả game
+// ~30 FPS; máy chậm (1 lần nhận diện > 40ms) tự hạ xuống ~15 FPS.
+// Khung camera 30 FPS cách nhau ~33,3ms và hay lệch vài ms => chừa 8ms dung sai, nếu không sẽ bỏ sót
+// gần một nửa số khung (thực tế chỉ còn ~15 FPS).
 const FAST_INTERVAL_MS = 33;
 const SLOW_INTERVAL_MS = 66;
 const SLOW_DETECT_MS = 40;
+const FRAME_JITTER_MS = 8;
+// Worker không trả lời quá lâu (VD: đang nạp model GPU) thì cho gửi khung mới
+const RESULT_TIMEOUT_MS = 1000;
+// Bộ xử lý AI: GPU (đo trên điện thoại: ~22ms/lần, game vẫn 60 FPS vì AI chạy trong worker);
+// CPU chậm gấp ~3 lần. Dò lỗi trên máy lạ (VD: TV GPU yếu) bằng ?delegate=CPU trên URL.
+const DELEGATE = new URLSearchParams(location.search).get('delegate')?.toUpperCase() === 'CPU' ? 'CPU' : 'GPU';
 
-// Điểm mốc khuôn mặt gửi sang Dart: 2 khoé mắt ngoài, môi trong trên/dưới, đỉnh trán, cằm
-const FACE_POINTS = [33, 263, 13, 14, 10, 152];
-const FACE_DATA_LENGTH = FACE_POINTS.length * 2 + 2 + 16; // điểm + tâm mặt + ma trận 4x4
-
-let fileset = null;
-const landmarkers = { hand: null, face: null };
-const loading = { hand: null, face: null };
-
+let worker = null;
 let stream = null;
-let video = null; // <video> ẩn dùng để nhận diện
+let video = null; // <video> ẩn dùng để lấy khung hình nhận diện
 const previews = new Set(); // các <video> xem trước đang hiển thị trong Flutter
 let mode = 'face';
 let running = false;
-let lastRun = 0;
+let inFlight = false; // đang chờ worker trả kết quả khung trước (chống dồn hàng)
+let lastSent = 0;
 let interval = FAST_INTERVAL_MS;
 
-async function createLandmarker(kind, delegate) {
-  fileset ??= await FilesetResolver.forVisionTasks(WASM_PATH);
-  const baseOptions = { modelAssetPath: MODEL_URLS[kind], delegate };
-  if (kind === 'hand') {
-    return HandLandmarker.createFromOptions(fileset, {
-      baseOptions,
-      runningMode: 'VIDEO',
-      numHands: 2,
-      minHandDetectionConfidence: 0.5,
-    });
-  }
-  return FaceLandmarker.createFromOptions(fileset, {
-    baseOptions,
-    runningMode: 'VIDEO',
-    numFaces: 1,
-    outputFacialTransformationMatrixes: true,
-  });
+// Số liệu đo hiệu năng (xem trong DevTools: motionBridge.stats)
+const stats = { detectFps: 0, avgCostMs: 0, intervalMs: FAST_INTERVAL_MS, delegate: {}, video: '', error: '' };
+let statFrames = 0;
+let statCost = 0;
+let statStart = 0;
+
+function ensureWorker() {
+  if (worker) return worker;
+  worker = new Worker(new URL('motion_worker.js', import.meta.url));
+  worker.onmessage = onWorkerMessage;
+  worker.onerror = (e) => {
+    console.error('[motion] worker error', e.message);
+    stats.error = e.message;
+    inFlight = false;
+  };
+  return worker;
 }
 
-/** Nạp model khi cần (GPU trước, lỗi thì CPU); chỉ nạp 1 lần */
-function ensureLandmarker(kind) {
-  if (landmarkers[kind]) return Promise.resolve(landmarkers[kind]);
-  loading[kind] ??= createLandmarker(kind, 'GPU')
-    .catch((e) => {
-      console.warn(`[motion] ${kind} GPU delegate failed, using CPU`, e);
-      return createLandmarker(kind, 'CPU');
-    })
-    .then((lm) => (landmarkers[kind] = lm))
-    .catch((e) => {
-      console.error(`[motion] cannot load ${kind} model`, e);
-      loading[kind] = null; // cho phép thử lại lần sau
-      throw e;
-    });
-  return loading[kind];
+function onWorkerMessage(event) {
+  const msg = event.data;
+  switch (msg.type) {
+    case 'delegate':
+      stats.delegate[msg.kind] = msg.delegate;
+      return;
+    case 'error':
+      stats.error = msg.message;
+      return;
+    case 'skip':
+      inFlight = false;
+      return;
+    case 'result':
+      inFlight = false;
+      onResult(msg);
+  }
+}
+
+function onResult({ mode: resultMode, data, count, width, height, cost }) {
+  interval = cost > SLOW_DETECT_MS ? SLOW_INTERVAL_MS : FAST_INTERVAL_MS;
+
+  const now = performance.now();
+  statFrames++;
+  statCost += cost;
+  if (now - statStart >= 1000) {
+    stats.detectFps = Math.round((statFrames * 1000) / (now - statStart));
+    stats.avgCostMs = Math.round(statCost / statFrames);
+    stats.intervalMs = interval;
+    stats.video = `${width}x${height}`;
+    statFrames = 0;
+    statCost = 0;
+    statStart = now;
+  }
+
+  if (resultMode !== mode) return; // kết quả của chế độ cũ (vừa đổi chế độ)
+  if (resultMode === 'hand') {
+    bridge.onHands?.(data ?? new Float32Array(0), count, width, height, cost);
+  } else {
+    bridge.onFace?.(data, width, height, cost);
+  }
 }
 
 function setupVideo(el) {
@@ -104,8 +124,8 @@ async function start(options = {}) {
 
   for (const el of previews) setupVideo(el);
 
-  // Camera hiện ngay; model nạp nền, có model thì bắt đầu nhận diện
-  ensureLandmarker(mode).catch(() => {});
+  // Camera hiện ngay; model nạp nền trong worker, có model thì bắt đầu nhận diện
+  ensureWorker().postMessage({ type: 'prepare', mode, delegate: DELEGATE });
   running = true;
   scheduleNextFrame();
   return { width: video.videoWidth, height: video.videoHeight };
@@ -113,6 +133,7 @@ async function start(options = {}) {
 
 function stop() {
   running = false;
+  inFlight = false;
   stream?.getTracks().forEach((t) => t.stop());
   stream = null;
   video?.remove();
@@ -123,7 +144,7 @@ function setMode(newMode) {
   if (newMode === mode) return;
   mode = newMode;
   interval = FAST_INTERVAL_MS;
-  ensureLandmarker(mode).catch(() => {});
+  worker?.postMessage({ type: 'prepare', mode, delegate: DELEGATE });
 }
 
 /** <video> xem trước cho HtmlElementView (lật gương như camera trước trên điện thoại) */
@@ -153,71 +174,27 @@ function scheduleNextFrame() {
 }
 
 function onFrame() {
-  try {
-    detect();
-  } catch (e) {
-    console.error('[motion] detect error', e);
-  }
+  sendFrame();
   scheduleNextFrame();
 }
 
-function detect() {
-  if (document.hidden || video.readyState < 2) return; // tab ẩn: không tốn CPU/pin
+/** Gửi khung hình hiện tại sang worker (mỗi lần chỉ 1 khung đang xử lý) */
+function sendFrame() {
+  if (document.hidden || !video || video.readyState < 2) return; // tab ẩn: không tốn CPU/pin
   const now = performance.now();
-  if (now - lastRun < interval) return;
-  const landmarker = landmarkers[mode];
-  if (!landmarker) return; // model đang nạp
-  lastRun = now;
-
-  const result = landmarker.detectForVideo(video, now);
-  const cost = performance.now() - now;
-  interval = cost > SLOW_DETECT_MS ? SLOW_INTERVAL_MS : FAST_INTERVAL_MS;
-
-  if (mode === 'hand') {
-    emitHands(result, cost);
-  } else {
-    emitFace(result, cost);
-  }
-}
-
-/** Gửi tay: mảng phẳng [x0,y0,...,x20,y20] cho từng tay (toạ độ chuẩn hoá theo khung hình gốc) */
-function emitHands(result, cost) {
-  const hands = result.landmarks ?? [];
-  const data = new Float32Array(hands.length * 42);
-  hands.forEach((hand, i) => {
-    for (let j = 0; j < 21; j++) {
-      data[i * 42 + j * 2] = hand[j].x;
-      data[i * 42 + j * 2 + 1] = hand[j].y;
-    }
-  });
-  bridge.onHands?.(data, hands.length, video.videoWidth, video.videoHeight, cost);
-}
-
-/** Gửi mặt: [6 điểm mốc (x,y), tâm khung bao (x,y), ma trận biến đổi 4x4 (NaN nếu không có)] */
-function emitFace(result, cost) {
-  const face = result.faceLandmarks?.[0];
-  if (!face) {
-    bridge.onFace?.(null, video.videoWidth, video.videoHeight, cost);
-    return;
-  }
-  const data = new Float32Array(FACE_DATA_LENGTH);
-  FACE_POINTS.forEach((idx, k) => {
-    data[k * 2] = face[idx].x;
-    data[k * 2 + 1] = face[idx].y;
-  });
-  let minX = 1, minY = 1, maxX = 0, maxY = 0;
-  for (const p of face) {
-    if (p.x < minX) minX = p.x;
-    if (p.x > maxX) maxX = p.x;
-    if (p.y < minY) minY = p.y;
-    if (p.y > maxY) maxY = p.y;
-  }
-  const c = FACE_POINTS.length * 2;
-  data[c] = (minX + maxX) / 2;
-  data[c + 1] = (minY + maxY) / 2;
-  const matrix = result.facialTransformationMatrixes?.[0]?.data;
-  for (let i = 0; i < 16; i++) data[c + 2 + i] = matrix ? matrix[i] : NaN;
-  bridge.onFace?.(data, video.videoWidth, video.videoHeight, cost);
+  if (inFlight && now - lastSent < RESULT_TIMEOUT_MS) return;
+  if (now - lastSent < interval - FRAME_JITTER_MS) return;
+  inFlight = true;
+  lastSent = now;
+  const frameMode = mode;
+  createImageBitmap(video)
+    .then((bitmap) => {
+      worker.postMessage({ type: 'detect', mode: frameMode, bitmap, timestamp: now }, [bitmap]);
+    })
+    .catch((e) => {
+      console.error('[motion] cannot grab frame', e);
+      inFlight = false;
+    });
 }
 
 const bridge = {
@@ -226,6 +203,7 @@ const bridge = {
   setMode,
   createPreview,
   listCameras,
+  stats,
   onHands: null, // (Float32Array data, int count, width, height, costMs)
   onFace: null, // (Float32Array | null data, width, height, costMs)
 };

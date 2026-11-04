@@ -1,12 +1,17 @@
 # web/motion: camera + AI cho bản Web
 
-Thư mục này được copy nguyên vào bản build web. `motion_bridge.js` mở webcam, chạy MediaPipe Tasks Vision và gửi kết quả cho Flutter (`lib/motion/backend/motion_backend_web.dart`) qua `window.motionBridge`.
+Thư mục này được copy nguyên vào bản build web.
+
+- `motion_bridge.js` (luồng chính): mở webcam, gửi khung hình sang worker, chuyển kết quả cho Flutter (`lib/motion/backend/motion_backend_web.dart`) qua `window.motionBridge`.
+- `motion_worker.js` (Web Worker): chạy MediaPipe Tasks Vision trên luồng riêng để không làm giật game.
+
+Xem hiệu năng trong DevTools: `motionBridge.stats`.
 
 ## Thư viện & model (tự host, không phụ thuộc CDN)
 
 | File | Nguồn |
 |---|---|
-| `mediapipe/vision_bundle_esm.js` | `@mediapipe/tasks-vision@1.1.1` → `vision_bundle.mjs` (đổi đuôi sang `.js` để mọi hosting trả đúng MIME cho ES module) |
+| `mediapipe/vision_bundle_iife.js` | `@mediapipe/tasks-vision@1.1.1` → `vision_bundle.js` (bản IIFE, nạp bằng `importScripts` trong worker) |
 | `mediapipe/wasm/vision_wasm_internal.{js,wasm}` | `@mediapipe/tasks-vision@1.1.1` → `wasm/` (bản SIMD) |
 | `mediapipe/wasm/vision_wasm_nosimd_internal.{js,wasm}` | `@mediapipe/tasks-vision@1.1.1` → `wasm/` (dự phòng cho trình duyệt cũ, VD trên TV) |
 | `models/hand_landmarker.task` | `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task` |
@@ -20,4 +25,4 @@ Giấy phép: Apache-2.0 (MediaPipe).
 npm pack @mediapipe/tasks-vision@<phiên bản>
 ```
 
-Giải nén, chép `vision_bundle.mjs` thành `mediapipe/vision_bundle_esm.js` và 4 file `vision_wasm_internal.*`, `vision_wasm_nosimd_internal.*` vào `mediapipe/wasm/`, rồi cập nhật bảng trên.
+Giải nén, chép `vision_bundle.js` thành `mediapipe/vision_bundle_iife.js` và 4 file `vision_wasm_internal.*`, `vision_wasm_nosimd_internal.*` vào `mediapipe/wasm/`, rồi cập nhật bảng trên.
