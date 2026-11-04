@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -8,15 +9,21 @@ import 'ui/screens/splash_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.landscapeLeft,
-    DeviceOrientation.landscapeRight,
-  ]);
-
-  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-
   final motionController = FaceMotionController();
-  await motionController.initialize();
+
+  if (kIsWeb) {
+    // Web: hiện splash ngay, camera + model AI (vài MB) nạp nền trong lúc đó
+    motionController.initialize();
+  } else {
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+
+    await motionController.initialize();
+  }
 
   runApp(MotionArcadeHubApp(motionController: motionController));
 }
