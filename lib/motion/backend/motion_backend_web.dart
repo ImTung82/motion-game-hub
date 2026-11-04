@@ -140,9 +140,11 @@ class WebMotionBackend extends MotionBackend {
   }
 
   /// Đổi điểm mốc MediaPipe sang cùng thang đo ML Kit (Android) để dùng chung ngưỡng & logic.
-  /// Thứ tự dữ liệu: 6 điểm (khoé mắt 33, 263, môi trong 13, 14, trán 10, cằm 152), tâm mặt, ma trận 4x4.
+  /// Thứ tự dữ liệu: 6 điểm (x, y, z) (khoé mắt 33, 263, môi trong 13, 14, trán 10, cằm 152), tâm mặt (x, y).
   static FaceSample _toFaceSample(Float32List d, double width, double height) {
-    Offset point(int k) => Offset(d[k * 2] * width, d[k * 2 + 1] * height);
+    Offset point(int k) => Offset(d[k * 3] * width, d[k * 3 + 1] * height);
+    // z của MediaPipe cùng thang với x (chuẩn hoá theo chiều rộng ảnh); nhỏ hơn = gần camera hơn
+    double depth(int k) => d[k * 3 + 2] * width;
     final eyeA = point(0);
     final eyeB = point(1);
     final upperLip = point(2);
@@ -151,29 +153,31 @@ class WebMotionBackend extends MotionBackend {
     final chin = point(5);
 
     // Nghiêng đầu theo quy ước ML Kit: dương = xoay NGƯỢC chiều kim đồng hồ trong ảnh (trục y hướng xuống)
-    final eyeLeft = eyeA.dx <= eyeB.dx ? eyeA : eyeB; // mắt bên trái ẢNH
-    final eyeRight = eyeA.dx <= eyeB.dx ? eyeB : eyeA;
+    final bool aIsLeft = eyeA.dx <= eyeB.dx; // mắt bên trái ẢNH
+    final eyeLeft = aIsLeft ? eyeA : eyeB;
+    final eyeRight = aIsLeft ? eyeB : eyeA;
     final rawRoll = -math.atan2(eyeRight.dy - eyeLeft.dy, eyeRight.dx - eyeLeft.dx) * 180.0 / math.pi;
 
     // Há miệng: khoảng cách 2 môi trong / chiều cao mặt, cùng hệ số với ML Kit
     final faceH = (chin - top).distance;
     final rawMouth = faceH > 0 ? (lowerLip - upperLip).distance / faceH * 2.8 : 0.0;
 
-    // Ngẩng/cúi & quay mặt từ ma trận biến đổi (column-major): r(i, j) = d[14 + j * 4 + i]
-    double rawPitch = 0.0;
-    double rawYaw = 0.0;
-    if (!d[14].isNaN) {
-      double r(int i, int j) => d[14 + j * 4 + i];
-      rawPitch = math.asin(r(1, 2).clamp(-1.0, 1.0)) * 180.0 / math.pi; // dương = ngẩng lên (như ML Kit)
-      rawYaw = math.asin(r(0, 2).clamp(-1.0, 1.0)) * 180.0 / math.pi;
-    }
+    // Ngẩng/cúi: vector cằm -> trán trong không gian 3D. Cúi đầu (gật) thì trán tiến về camera (z giảm)
+    // => góc âm; ngẩng lên => góc dương (cùng quy ước ML Kit headEulerAngleX)
+    final double upZ = depth(4) - depth(5);
+    final double upY = top.dy - chin.dy; // âm khi mặt thẳng (trán ở trên cằm)
+    final double rawPitch = math.atan2(upZ, -upY) * 180.0 / math.pi;
+
+    // Quay mặt trái/phải: vector mắt trái ẢNH -> mắt phải ẢNH theo trục z
+    final double eyeZ = aIsLeft ? depth(1) - depth(0) : depth(0) - depth(1);
+    final double rawYaw = math.atan2(eyeZ, eyeRight.dx - eyeLeft.dx) * 180.0 / math.pi;
 
     return FaceSample(
       rawRoll: rawRoll,
       rawYaw: rawYaw,
       rawPitch: rawPitch,
       rawMouth: rawMouth,
-      center: Offset(d[12], d[13]),
+      center: Offset(d[18], d[19]),
     );
   }
 }

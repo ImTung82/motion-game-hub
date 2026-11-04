@@ -3,18 +3,56 @@
 // Luồng chính chỉ lo camera & gửi khung hình; AI chạy trong motion_worker.js (luồng riêng)
 // để Flutter có trọn luồng chính mà vẽ game mượt.
 
-// ~30 FPS; máy chậm (1 lần nhận diện > 40ms) tự hạ xuống ~15 FPS.
+// ~30 FPS; máy rất chậm (1 lần nhận diện > 60ms) tự hạ xuống ~15 FPS cho đỡ tốn pin. AI chạy trong worker nên
+// không cần hạ sớm hơn: VD CPU điện thoại ~41ms/lần vẫn chạy ~24 lần/giây.
 // Khung camera 30 FPS cách nhau ~33,3ms và hay lệch vài ms => chừa 8ms dung sai, nếu không sẽ bỏ sót
 // gần một nửa số khung (thực tế chỉ còn ~15 FPS).
 const FAST_INTERVAL_MS = 33;
 const SLOW_INTERVAL_MS = 66;
-const SLOW_DETECT_MS = 40;
+const SLOW_DETECT_MS = 60;
 const FRAME_JITTER_MS = 8;
 // Worker không trả lời quá lâu (VD: đang nạp model GPU) thì cho gửi khung mới
 const RESULT_TIMEOUT_MS = 1000;
 // Bộ xử lý AI: GPU (đo trên điện thoại: ~22ms/lần, game vẫn 60 FPS vì AI chạy trong worker);
 // CPU chậm gấp ~3 lần. Dò lỗi trên máy lạ (VD: TV GPU yếu) bằng ?delegate=CPU trên URL.
-const DELEGATE = new URLSearchParams(location.search).get('delegate')?.toUpperCase() === 'CPU' ? 'CPU' : 'GPU';
+let delegate = new URLSearchParams(location.search).get('delegate')?.toUpperCase() === 'CPU' ? 'CPU' : 'GPU';
+// MediaPipe lỗi (VD: GPU vài máy trả NaN) => dựng lại worker, tối đa 1 lần / 3s.
+// GPU lỗi 3 lần trong 1 phút thì chuyển hẳn sang CPU cho phiên này.
+const RESTART_MIN_GAP_MS = 3000;
+const GPU_FAILURES_BEFORE_CPU = 3;
+let lastRestart = -Infinity;
+let gpuFailures = [];
+
+// Kết quả kiểm tra GPU (xem checkGpu trong motion_worker.js) lưu theo GPU + phiên bản Chrome:
+// lần sau mở trang khỏi kiểm tra lại; cập nhật Chrome / driver thì tự kiểm tra lại.
+const GPU_KEY = (() => {
+  let renderer = 'unknown';
+  try {
+    const gl = new OffscreenCanvas(1, 1).getContext('webgl2');
+    const info = gl?.getExtension('WEBGL_debug_renderer_info');
+    renderer = (info && gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) || gl?.getParameter(gl.RENDERER) || renderer;
+  } catch (_) {}
+  const chrome = navigator.userAgent.match(/Chrome\/(\d+)/)?.[1] ?? 'other';
+  return `motion.gpuOk:${renderer}:${chrome}`;
+})();
+
+function loadGpuOk() {
+  try {
+    const v = localStorage.getItem(GPU_KEY);
+    return v === null ? null : v === 'true';
+  } catch (_) {
+    return null;
+  }
+}
+
+function saveGpuOk(ok) {
+  try {
+    localStorage.setItem(GPU_KEY, String(ok));
+  } catch (_) {}
+}
+
+const initialGpuOk = loadGpuOk();
+if (initialGpuOk === false) delegate = 'CPU'; // máy đã biết GPU hỏng: dùng CPU ngay
 
 let worker = null;
 let stream = null;
@@ -23,14 +61,16 @@ const previews = new Set(); // các <video> xem trước đang hiển thị tron
 let mode = 'face';
 let running = false;
 let inFlight = false; // đang chờ worker trả kết quả khung trước (chống dồn hàng)
+let frameWaiting = false; // có khung mới tới trong lúc worker bận => gửi ngay khi worker xong
 let lastSent = 0;
 let interval = FAST_INTERVAL_MS;
 
 // Số liệu đo hiệu năng (xem trong DevTools: motionBridge.stats)
-const stats = { detectFps: 0, avgCostMs: 0, intervalMs: FAST_INTERVAL_MS, delegate: {}, video: '', error: '' };
+const stats = { detectFps: 0, avgCostMs: 0, intervalMs: FAST_INTERVAL_MS, delegate: {}, gpuOk: null, video: '', error: '', restarts: 0 };
 let statFrames = 0;
 let statCost = 0;
 let statStart = 0;
+const debugLog = []; // 20 tin nhắn gần nhất từ worker (dò lỗi)
 
 function ensureWorker() {
   if (worker) return worker;
@@ -41,17 +81,51 @@ function ensureWorker() {
     stats.error = e.message;
     inFlight = false;
   };
+  worker.postMessage({ type: 'prepare', mode, delegate, gpuOk: loadGpuOk() });
   return worker;
+}
+
+/** Graph MediaPipe hỏng thì không cứu được trong cùng worker => bỏ worker, dựng worker mới (nạp lại wasm + GPU) */
+function restartWorker(reason) {
+  const now = performance.now();
+  if (now - lastRestart < RESTART_MIN_GAP_MS) return;
+  lastRestart = now;
+  stats.restarts++;
+  stats.error = reason;
+  if (delegate === 'GPU') {
+    gpuFailures = gpuFailures.filter((t) => now - t < 60000);
+    gpuFailures.push(now);
+    if (gpuFailures.length >= GPU_FAILURES_BEFORE_CPU) {
+      console.warn('[motion] GPU keeps failing on this device, switching to CPU');
+      delegate = 'CPU';
+      saveGpuOk(false);
+    }
+  }
+  worker?.terminate();
+  worker = null;
+  inFlight = false;
+  if (running) ensureWorker();
 }
 
 function onWorkerMessage(event) {
   const msg = event.data;
+  debugLog.push({ type: msg.type, mode: msg.mode, count: msg.count, cost: msg.cost && Math.round(msg.cost), t: Math.round(performance.now()) });
+  if (debugLog.length > 20) debugLog.shift();
   switch (msg.type) {
     case 'delegate':
       stats.delegate[msg.kind] = msg.delegate;
       return;
+    case 'gpu-check':
+      stats.gpuOk = msg.ok;
+      saveGpuOk(msg.ok);
+      if (!msg.ok) delegate = 'CPU';
+      return;
     case 'error':
       stats.error = msg.message;
+      return;
+    case 'fatal':
+      inFlight = false;
+      restartWorker(msg.message);
       return;
     case 'skip':
       inFlight = false;
@@ -59,6 +133,7 @@ function onWorkerMessage(event) {
     case 'result':
       inFlight = false;
       onResult(msg);
+      if (frameWaiting) sendFrame(); // nhận diện lâu hơn 1 khung (VD 40ms > 33ms): không chờ thêm khung sau
   }
 }
 
@@ -125,7 +200,7 @@ async function start(options = {}) {
   for (const el of previews) setupVideo(el);
 
   // Camera hiện ngay; model nạp nền trong worker, có model thì bắt đầu nhận diện
-  ensureWorker().postMessage({ type: 'prepare', mode, delegate: DELEGATE });
+  ensureWorker();
   running = true;
   scheduleNextFrame();
   return { width: video.videoWidth, height: video.videoHeight };
@@ -144,7 +219,7 @@ function setMode(newMode) {
   if (newMode === mode) return;
   mode = newMode;
   interval = FAST_INTERVAL_MS;
-  worker?.postMessage({ type: 'prepare', mode, delegate: DELEGATE });
+  worker?.postMessage({ type: 'prepare', mode, delegate });
 }
 
 /** <video> xem trước cho HtmlElementView (lật gương như camera trước trên điện thoại) */
@@ -182,13 +257,22 @@ function onFrame() {
 function sendFrame() {
   if (document.hidden || !video || video.readyState < 2) return; // tab ẩn: không tốn CPU/pin
   const now = performance.now();
-  if (inFlight && now - lastSent < RESULT_TIMEOUT_MS) return;
+  if (inFlight && now - lastSent < RESULT_TIMEOUT_MS) {
+    frameWaiting = true;
+    return;
+  }
   if (now - lastSent < interval - FRAME_JITTER_MS) return;
   inFlight = true;
+  frameWaiting = false;
   lastSent = now;
   const frameMode = mode;
   createImageBitmap(video)
     .then((bitmap) => {
+      if (!worker) {
+        bitmap.close(); // worker đang được dựng lại
+        inFlight = false;
+        return;
+      }
       worker.postMessage({ type: 'detect', mode: frameMode, bitmap, timestamp: now }, [bitmap]);
     })
     .catch((e) => {
@@ -204,6 +288,7 @@ const bridge = {
   createPreview,
   listCameras,
   stats,
+  debug: { log: () => debugLog, restartWorker: () => restartWorker("manual") }, // dò lỗi trong DevTools
   onHands: null, // (Float32Array data, int count, width, height, costMs)
   onFace: null, // (Float32Array | null data, width, height, costMs)
 };
