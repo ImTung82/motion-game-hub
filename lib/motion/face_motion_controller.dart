@@ -1,23 +1,21 @@
-import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
-import 'package:camera/camera.dart';
-import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
-import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
-import 'package:hand_landmarker/hand_landmarker.dart' as hl;
+import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants.dart';
+import 'backend/motion_backend.dart';
+import 'backend/motion_backend_factory.dart';
 import 'motion_state.dart';
 
 /// Bộ điều khiển cử chỉ khuôn mặt và bàn tay (Face & Hand Motion Controller)
 class FaceMotionController extends ChangeNotifier {
-  CameraController? _cameraController;
-  FaceDetector? _faceDetector;
-  List<CameraDescription> _cameras = [];
+  // Nguồn camera + AI theo nền tảng (Android: ML Kit + hand_landmarker, Web: MediaPipe JS)
+  late final MotionBackend _backend = createMotionBackend(
+    onFace: _onFaceResult,
+    onHands: _onHandResult,
+    aiRotationIndex: (mode) => mode == MotionInputMode.hand ? _aiHandRotationIndex : _aiRotationOffset,
+  );
 
   bool _isInitialized = false;
-  bool _isProcessing = false;
   bool _cameraAvailable = false;
   String _statusMessage = 'Starting camera...';
 
@@ -26,6 +24,7 @@ class FaceMotionController extends ChangeNotifier {
   set inputMode(MotionInputMode mode) {
     if (_inputMode == mode) return;
     _inputMode = mode;
+    _backend.mode = mode;
     calibrateNeutral();
     _savePreferences();
     notifyListeners();
@@ -128,11 +127,6 @@ class FaceMotionController extends ChangeNotifier {
   int _tiltLeftDebounce = 0;
   int _tiltRightDebounce = 0;
 
-  // FPS & Latency
-  double _fps = 0.0;
-  int _frameCount = 0;
-  DateTime _lastFrameTime = DateTime.now();
-
   MotionState _state = MotionState.initial();
 
   // Getters
@@ -140,7 +134,17 @@ class FaceMotionController extends ChangeNotifier {
   bool get isInitialized => _isInitialized;
   bool get cameraAvailable => _cameraAvailable;
   String get statusMessage => _statusMessage;
-  CameraController? get cameraController => _cameraController;
+  /// Camera đã mở & có hình xem trước
+  bool get hasPreview => _backend.isReady;
+
+  /// Kích thước khung hình gốc của camera (null khi chưa sẵn sàng)
+  Size? get previewSize => _backend.previewSize;
+
+  /// Có hỗ trợ xoay camera / xoay AI (Android) hay không (Web: không)
+  bool get supportsRotation => _backend.supportsRotation;
+
+  /// Hình xem trước camera (chỉ gọi khi [hasPreview])
+  Widget buildPreview() => _backend.buildPreview();
   bool get isCalibrating => _isCalibrating;
 
   double get tiltThreshold => _tiltThreshold;
@@ -237,13 +241,7 @@ class FaceMotionController extends ChangeNotifier {
   bool _isInitializing = false;
 
   Future<void> retryInitialize() async {
-    try {
-      if (_cameraController != null) {
-        await _cameraController!.stopImageStream().catchError((_) {});
-        await _cameraController!.dispose().catchError((_) {});
-      }
-    } catch (_) {}
-    _cameraController = null;
+    await _backend.stop();
     _cameraAvailable = false;
     _isInitialized = false;
     _isInitializing = false;
@@ -299,40 +297,15 @@ class FaceMotionController extends ChangeNotifier {
     await _loadPreferences();
 
     try {
-      // 1. Face Detector: Tối ưu Fast Mode cho 60 FPS
-      _faceDetector = FaceDetector(
-        options: FaceDetectorOptions(
-          enableContours: true,
-          enableLandmarks: true,
-          enableClassification: false,
-          performanceMode: FaceDetectorMode.fast,
-          minFaceSize: 0.05,
-        ),
-      );
-
-      _cameras = await availableCameras();
-      final frontCamera = _cameras.firstWhere(
-        (cam) => cam.lensDirection == CameraLensDirection.front,
-        orElse: () => _cameras.isNotEmpty ? _cameras.first : throw Exception('No camera found'),
-      );
-
-      // ResolutionPreset.low (240p - 360p) cung cấp FPS tối đa (30-60 FPS) và độ trễ cực thấp
-      _cameraController = CameraController(
-        frontCamera,
-        ResolutionPreset.low,
-        enableAudio: false,
-        imageFormatGroup: Platform.isAndroid ? ImageFormatGroup.yuv420 : ImageFormatGroup.bgra8888,
-      );
-
-      await _cameraController!.initialize();
-      _cameraAvailable = true;
-      _isInitialized = true;
-      _statusMessage = 'Camera ready';
-      _isCalibrating = false;
-      _calibrationFrames = 0;
-      notifyListeners();
-
-      await _cameraController!.startImageStream(_processCameraFrame);
+      _backend.mode = _inputMode;
+      await _backend.start(onCameraReady: () {
+        _cameraAvailable = true;
+        _isInitialized = true;
+        _statusMessage = 'Camera ready';
+        _isCalibrating = false;
+        _calibrationFrames = 0;
+        notifyListeners();
+      });
     } catch (e) {
       debugPrint('FaceMotionController Camera Error: $e');
       _cameraAvailable = false;
@@ -342,142 +315,51 @@ class FaceMotionController extends ChangeNotifier {
     }
   }
 
-  Future<void> _processCameraFrame(CameraImage image) async {
-    if (_inputMode == MotionInputMode.hand) {
-      _feedHandFrame(image);
+  void _onFaceResult(FaceSample? face, int latency, double currentFps) {
+    if (_inputMode != MotionInputMode.face) return;
+    final endTime = DateTime.now();
+
+    if (face == null) {
+      _hasSmoothFaceVisual = false;
+      _consecutiveEmptyFrames++;
+      if (_consecutiveEmptyFrames >= 6) {
+        _aiRotationOffset = (_aiRotationOffset + 1) % 4;
+        _consecutiveEmptyFrames = 0;
+      }
+
+      _chompDebounce = 0;
+      _tiltLeftDebounce = 0;
+      _tiltRightDebounce = 0;
+      _state = _state.copyWith(
+        inputMode: MotionInputMode.face,
+        faceDetected: false,
+        handDetected: false,
+        tiltDirection: TiltDirection.neutral,
+        steerX: 0.0,
+        isChomping: false,
+        fps: currentFps,
+        latencyMs: latency,
+        timestamp: endTime,
+      );
+      notifyListeners();
       return;
     }
-    if (_isProcessing || _faceDetector == null) return;
-    final feedNow = DateTime.now();
-    if (feedNow.difference(_lastFaceFeed).inMilliseconds < _faceMinIntervalMs) return;
-    _lastFaceFeed = feedNow;
-    _isProcessing = true;
-    final startTime = DateTime.now();
 
-    try {
-      final inputImage = _convertCameraImageToInputImage(image);
-      if (inputImage == null) {
-        _isProcessing = false;
-        return;
-      }
-
-      final endTime = DateTime.now();
-      final latency = endTime.difference(startTime).inMilliseconds;
-      final instantFps = latency > 0 ? (1000.0 / latency).clamp(1.0, 60.0) : 30.0;
-
-      _frameCount++;
-      final elapsed = endTime.difference(_lastFrameTime).inMilliseconds;
-      if (elapsed >= 1000) {
-        _fps = (_frameCount * 1000.0) / elapsed;
-        _frameCount = 0;
-        _lastFrameTime = endTime;
-      }
-
-      final currentFps = _fps > 0 ? _fps : instantFps;
-
-      // XỬ LÝ THEO CHẾ ĐỘ HIỆN TẠI: FACE HOẶC HAND
-      if (_inputMode == MotionInputMode.face) {
-        final faces = await _faceDetector!.processImage(inputImage);
-
-        if (faces.isEmpty) {
-          _hasSmoothFaceVisual = false;
-          _consecutiveEmptyFrames++;
-          if (_consecutiveEmptyFrames >= 6) {
-            _aiRotationOffset = (_aiRotationOffset + 1) % 4;
-            _consecutiveEmptyFrames = 0;
-          }
-
-          _chompDebounce = 0;
-          _tiltLeftDebounce = 0;
-          _tiltRightDebounce = 0;
-          _state = _state.copyWith(
-            inputMode: MotionInputMode.face,
-            faceDetected: false,
-            handDetected: false,
-            tiltDirection: TiltDirection.neutral,
-            steerX: 0.0,
-            isChomping: false,
-            fps: currentFps,
-            latencyMs: latency,
-            timestamp: endTime,
-          );
-          notifyListeners();
-          _isProcessing = false;
-          return;
-        }
-
-        _consecutiveEmptyFrames = 0;
-        final face = faces.first;
-        _processFaceMetrics(face, latency, endTime, currentFps);
-      }
-    } catch (e) {
-      debugPrint('Error processing camera frame: $e');
-      _statusMessage = 'Frame processing error: $e';
-    } finally {
-      _isProcessing = false;
-    }
+    _consecutiveEmptyFrames = 0;
+    _processFaceMetrics(face, latency, endTime, currentFps);
   }
 
   // ==========================================
   // XỬ LÝ CỬ CHỈ KHUÔN MẶT (FACE MODE)
   // ==========================================
-  void _processFaceMetrics(Face face, int latency, DateTime timestamp, double currentFps) {
-    double rawRoll = face.headEulerAngleZ ?? 0.0;
-    final leftEye = face.landmarks[FaceLandmarkType.leftEye]?.position;
-    final rightEye = face.landmarks[FaceLandmarkType.rightEye]?.position;
-
-    if (leftEye != null && rightEye != null) {
-      final dx = (rightEye.x - leftEye.x).toDouble();
-      final dy = (rightEye.y - leftEye.y).toDouble();
-      final eyeAngle = math.atan2(dy, dx) * 180.0 / math.pi;
-      if (rawRoll == 0.0) {
-        rawRoll = eyeAngle;
-      }
-    }
-
-    double rawYaw = face.headEulerAngleY ?? 0.0;
-    double rawPitch = face.headEulerAngleX ?? 0.0;
-
-    double rawMouth = 0.0;
-    final upperLip = face.contours[FaceContourType.upperLipBottom];
-    final lowerLip = face.contours[FaceContourType.lowerLipTop];
-    if (upperLip != null && lowerLip != null && upperLip.points.isNotEmpty && lowerLip.points.isNotEmpty) {
-      double uX = 0, uY = 0;
-      for (final p in upperLip.points) { uX += p.x; uY += p.y; }
-      uX /= upperLip.points.length;
-      uY /= upperLip.points.length;
-
-      double lX = 0, lY = 0;
-      for (final p in lowerLip.points) { lX += p.x; lY += p.y; }
-      lX /= lowerLip.points.length;
-      lY /= lowerLip.points.length;
-
-      final lipDist = math.sqrt((lX - uX) * (lX - uX) + (lY - uY) * (lY - uY));
-      final faceH = face.boundingBox.height;
-      if (faceH > 0) {
-        rawMouth = (lipDist / faceH) * 2.8;
-      }
-    }
-
-    if (rawMouth == 0.0) {
-      final leftM = face.landmarks[FaceLandmarkType.leftMouth]?.position;
-      final rightM = face.landmarks[FaceLandmarkType.rightMouth]?.position;
-      final bottomM = face.landmarks[FaceLandmarkType.bottomMouth]?.position;
-
-      if (leftM != null && rightM != null && bottomM != null) {
-        final midX = (leftM.x + rightM.x) / 2.0;
-        final midY = (leftM.y + rightM.y) / 2.0;
-        final mouthDepth = math.sqrt((bottomM.x - midX) * (bottomM.x - midX) + (bottomM.y - midY) * (bottomM.y - midY));
-        final mouthWidth = math.sqrt((rightM.x - leftM.x) * (rightM.x - leftM.x) + (rightM.y - leftM.y) * (rightM.y - leftM.y));
-        if (mouthWidth > 0) {
-          rawMouth = mouthDepth / mouthWidth;
-        }
-      }
-    }
-
-    final smileProb = face.smilingProbability ?? 0.0;
-    final leftEyeOpen = face.leftEyeOpenProbability ?? 1.0;
-    final rightEyeOpen = face.rightEyeOpenProbability ?? 1.0;
+  void _processFaceMetrics(FaceSample face, int latency, DateTime timestamp, double currentFps) {
+    final rawRoll = face.rawRoll;
+    final rawYaw = face.rawYaw;
+    final rawPitch = face.rawPitch;
+    final rawMouth = face.rawMouth;
+    final smileProb = face.smileProb;
+    final leftEyeOpen = face.leftEyeOpen;
+    final rightEyeOpen = face.rightEyeOpen;
     final isWinking = (leftEyeOpen - rightEyeOpen).abs() > 0.5;
 
     if (!_hasInitialValues) {
@@ -578,8 +460,7 @@ class FaceMotionController extends ChangeNotifier {
     }
 
     // Vị trí khuôn mặt trên màn hình preview (cùng phép lật gương/xoay như reticle bàn tay)
-    final box = face.boundingBox;
-    final faceScreen = _landmarkToScreen(box.center.dx / _faceUprightW, box.center.dy / _faceUprightH);
+    final faceScreen = _landmarkToScreen(face.center.dx, face.center.dy);
     final double faceVX = ((faceScreen.dx - 0.5) * 2.0).clamp(-1.0, 1.0);
     final double faceVY = ((faceScreen.dy - 0.5) * 2.0).clamp(-1.0, 1.0);
     if (!_hasSmoothFaceVisual) {
@@ -627,27 +508,9 @@ class FaceMotionController extends ChangeNotifier {
   // ==========================================
   // HAND MODE: MediaPipe Hand Landmarker (21 điểm / bàn tay)
   // ==========================================
-  hl.HandLandmarkerPlugin? _handPlugin;
-  StreamSubscription<List<hl.Hand>>? _handSub;
-  DateTime _lastHandFeed = DateTime.fromMillisecondsSinceEpoch(0);
-  // Chống dồn hàng (backpressure): plugin đổi YUV->RGB từng pixel NGAY TRÊN luồng UI rồi mới đưa
-  // MediaPipe. Gửi 30 FPS trong khi MediaPipe (CPU) chỉ xử lý ~10-20 FPS => khung bị bỏ vẫn tốn
-  // chi phí đổi màu, luồng UI quá tải, máy nóng -> hạ xung -> frame camera & kết quả xếp hàng, trễ
-  // tăng dần theo thời gian. Nên chỉ gửi khung mới khi khung trước đã có kết quả.
-  bool _handFrameInFlight = false;
-  // Chuẩn vàng ~30-33 FPS: Mượt mà hoàn hảo cho phản xạ cử chỉ, máy mạnh mát lạnh,
-  // máy yếu không bị nóng máy hay tụt pin khi trẻ chơi lâu.
-  static const int _handMinIntervalMs = 30; // ~33 FPS cap (ngưỡng tối ưu tốt nhất)
-  static const int _handResultTimeoutMs = 200; // MediaPipe bỏ khung thì không trả kết quả -> hết hạn chờ
-  DateTime _lastFaceFeed = DateTime.fromMillisecondsSinceEpoch(0);
-  static const int _faceMinIntervalMs = 30; // ~33 FPS cho Face mode
-  double _faceUprightW = 1.0;
-  double _faceUprightH = 1.0;
   bool _hasSmoothFaceVisual = false;
   double _smoothFaceVisualX = 0.0;
   double _smoothFaceVisualY = 0.0;
-  double _handUprightW = 1.0;
-  double _handUprightH = 1.0;
   int _handLostFrames = 0;
   bool _hasSmoothHand = false;
   double _smoothHandX = 0.0; // toạ độ màn hình (đã lật gương) trừ 0.5
@@ -656,12 +519,10 @@ class FaceMotionController extends ChangeNotifier {
   DateTime _handFpsStart = DateTime.now();
   double _handFps = 0.0;
 
-  bool get _isFrontCamera => _cameraController?.description.lensDirection == CameraLensDirection.front;
-
   /// Chuyển đổi toạ độ từ cảm biến camera raw [0..1] sang toạ độ Màn hình Preview [0..1]
   /// phụ thuộc vào góc xoay _cameraRotationQuarterTurns và thuộc tính gương của camera trước.
   Offset _landmarkToScreen(double xRaw, double yRaw) {
-    final double u = _isFrontCamera ? (1.0 - xRaw) : xRaw;
+    final double u = _backend.mirrored ? (1.0 - xRaw) : xRaw;
     final double v = yRaw;
 
     double x, y;
@@ -685,84 +546,6 @@ class FaceMotionController extends ChangeNotifier {
         break;
     }
     return Offset(x.clamp(0.0, 1.0), y.clamp(0.0, 1.0));
-  }
-
-  void _ensureHandPlugin() {
-    if (_handPlugin != null || !Platform.isAndroid) return;
-    try {
-      _handPlugin = hl.HandLandmarkerPlugin.create(
-        numHands: 2,
-        minHandDetectionConfidence: 0.5,
-        delegate: hl.HandLandmarkerDelegate.gpu,
-      );
-      _handSub = _handPlugin!.landmarkStream.listen(_onHandResult);
-      debugPrint('HandLandmarker initialized successfully with GPU delegate (numHands: 2)');
-    } catch (e) {
-      debugPrint('HandLandmarker GPU error, falling back to CPU: $e');
-      try {
-        _handPlugin = hl.HandLandmarkerPlugin.create(
-          numHands: 2,
-          minHandDetectionConfidence: 0.5,
-          delegate: hl.HandLandmarkerDelegate.cpu,
-        );
-        _handSub = _handPlugin!.landmarkStream.listen(_onHandResult);
-      } catch (e2) {
-        debugPrint('HandLandmarker CPU error: $e2');
-        _statusMessage = 'Hand tracking init error: $e2';
-        _handPlugin = null;
-      }
-    }
-  }
-
-  /// Góc xoay (độ) để ảnh sensor thành ảnh đứng cho MediaPipe Hand detector
-  int _rotationDegrees() {
-    final camera = _cameraController?.description;
-    final sensor = camera?.sensorOrientation ?? 0;
-    int device = 90;
-    if (_cameraController != null) {
-      switch (_cameraController!.value.deviceOrientation) {
-        case DeviceOrientation.portraitUp:
-          device = 0;
-          break;
-        case DeviceOrientation.landscapeLeft:
-          device = 90;
-          break;
-        case DeviceOrientation.portraitDown:
-          device = 180;
-          break;
-        case DeviceOrientation.landscapeRight:
-          device = 270;
-          break;
-      }
-    }
-    final base = (camera?.lensDirection == CameraLensDirection.front)
-        ? (sensor + device) % 360
-        : (sensor - device + 360) % 360;
-    return (base + _aiHandRotationIndex * 90) % 360;
-  }
-
-  void _feedHandFrame(CameraImage image) {
-    _ensureHandPlugin();
-    final plugin = _handPlugin;
-    if (plugin == null || _cameraController == null || image.planes.length < 3) return;
-
-    final now = DateTime.now();
-    final sinceLast = now.difference(_lastHandFeed).inMilliseconds;
-    if (sinceLast < _handMinIntervalMs) return;
-    if (_handFrameInFlight && sinceLast < _handResultTimeoutMs) return; // khung trước chưa xong
-    _lastHandFeed = now;
-    _handFrameInFlight = true;
-
-    try {
-      final rot = _rotationDegrees();
-      final swap = rot == 90 || rot == 270;
-      _handUprightW = (swap ? image.height : image.width).toDouble();
-      _handUprightH = (swap ? image.width : image.height).toDouble();
-      plugin.processFrame(image, rot);
-    } catch (e) {
-      _handFrameInFlight = false;
-      debugPrint('Hand processFrame error: $e');
-    }
   }
 
   void _markHandLost() {
@@ -800,9 +583,9 @@ class FaceMotionController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _onHandResult(List<hl.Hand> hands) {
-    _handFrameInFlight = false; // cho phép gửi khung kế tiếp
+  void _onHandResult(HandFrame frame) {
     if (_inputMode != MotionInputMode.hand) return;
+    final hands = frame.hands;
 
     final now = DateTime.now();
     _handResultCount++;
@@ -813,7 +596,7 @@ class FaceMotionController extends ChangeNotifier {
       _handFpsStart = now;
     }
 
-    if (hands.isEmpty || hands.first.landmarks.length < 21) {
+    if (hands.isEmpty || hands.first.length < 21) {
       _handLostFrames++;
       // Tự động săn góc xoay AI: chỉ khi mất tay lâu (~1.5s). Trước đây đổi góc sau 0.4s khiến
       // tay bị che thoáng qua cũng đổi hệ toạ độ -> trục trái/phải bị xoay, điều khiển loạn.
@@ -835,13 +618,13 @@ class FaceMotionController extends ChangeNotifier {
       _resetHandCalibration();
     }
 
-    final lm = hands.first.landmarks;
-    final double w = _handUprightW;
-    final double h = _handUprightH;
+    final lm = hands.first;
+    final double w = frame.uprightW;
+    final double h = frame.uprightH;
 
     // Chuyển đổi 21 điểm landmarks sang Hệ quy chiếu Màn hình Preview (Screen Coordinates)
     // Giúp Reticle và Vector cử chỉ khớp 100% với những gì người dùng thấy trên màn hình
-    final screenLm = List<Offset>.generate(21, (i) => _landmarkToScreen(lm[i].x, lm[i].y));
+    final screenLm = List<Offset>.generate(21, (i) => _landmarkToScreen(lm[i].dx, lm[i].dy));
 
     // Khoảng cách theo pixel màn hình
     double dist(int a, int b) {
@@ -1172,10 +955,10 @@ class FaceMotionController extends ChangeNotifier {
     final int handsCount = hands.length >= 2 ? 2 : 1;
 
     if (hands.length >= 2) {
-      final lmA = hands[0].landmarks;
-      final lmB = hands[1].landmarks;
-      final sLmA = List<Offset>.generate(21, (i) => _landmarkToScreen(lmA[i].x, lmA[i].y));
-      final sLmB = List<Offset>.generate(21, (i) => _landmarkToScreen(lmB[i].x, lmB[i].y));
+      final lmA = hands[0];
+      final lmB = hands[1];
+      final sLmA = List<Offset>.generate(21, (i) => _landmarkToScreen(lmA[i].dx, lmA[i].dy));
+      final sLmB = List<Offset>.generate(21, (i) => _landmarkToScreen(lmB[i].dx, lmB[i].dy));
 
       double cxA = 0.0, cyA = 0.0;
       for (final i in const [0, 5, 9, 13, 17]) {
@@ -1257,7 +1040,7 @@ class FaceMotionController extends ChangeNotifier {
       isChomping: isFist,
       relativeMouth: isFist ? 0.35 : 0.0,
       fps: _handFps,
-      latencyMs: now.difference(_lastHandFeed).inMilliseconds,
+      latencyMs: frame.latencyMs,
       timestamp: now,
     );
     notifyListeners();
@@ -1375,131 +1158,8 @@ class FaceMotionController extends ChangeNotifier {
     _isHandSteeringActive = false;
   }
 
-  Uint8List _yuv420ToNv21(CameraImage image) {
-    final width = image.width;
-    final height = image.height;
-    final yPlane = image.planes[0];
-    final uPlane = image.planes[1];
-    final vPlane = image.planes[2];
-
-    final yBuffer = yPlane.bytes;
-    final uBuffer = uPlane.bytes;
-    final vBuffer = vPlane.bytes;
-
-    final numPixels = width * height;
-    final nv21 = Uint8List(numPixels + (numPixels ~/ 2));
-
-    final yRowStride = yPlane.bytesPerRow;
-    final yPixelStride = yPlane.bytesPerPixel ?? 1;
-
-    // Tối ưu tốc độ cao: memcpy block (setRange)
-    if (yPixelStride == 1 && yRowStride == width) {
-      nv21.setRange(0, numPixels, yBuffer);
-    } else {
-      int idY = 0;
-      for (int y = 0; y < height; y++) {
-        final rowStart = y * yRowStride;
-        if (yPixelStride == 1) {
-          nv21.setRange(idY, idY + width, yBuffer, rowStart);
-          idY += width;
-        } else {
-          for (int x = 0; x < width; x++) {
-            nv21[idY++] = yBuffer[rowStart + x * yPixelStride];
-          }
-        }
-      }
-    }
-
-    int idUV = numPixels;
-    final uvRowStride = uPlane.bytesPerRow;
-    final uvPixelStride = uPlane.bytesPerPixel ?? 2;
-
-    for (int y = 0; y < height ~/ 2; y++) {
-      final rowStart = y * uvRowStride;
-      for (int x = 0; x < width ~/ 2; x++) {
-        final uvIndex = rowStart + x * uvPixelStride;
-        if (uvIndex < vBuffer.length && uvIndex < uBuffer.length) {
-          nv21[idUV++] = vBuffer[uvIndex];
-          nv21[idUV++] = uBuffer[uvIndex];
-        }
-      }
-    }
-
-    return nv21;
-  }
-
-  InputImage? _convertCameraImageToInputImage(CameraImage image) {
-    if (_cameraController == null) return null;
-
-    final camera = _cameraController!.description;
-    final sensorOrientation = camera.sensorOrientation;
-
-    int deviceRotationDegrees = 90;
-    final devOrientation = _cameraController!.value.deviceOrientation;
-    switch (devOrientation) {
-      case DeviceOrientation.portraitUp:
-        deviceRotationDegrees = 0;
-        break;
-      case DeviceOrientation.landscapeLeft:
-        deviceRotationDegrees = 90;
-        break;
-      case DeviceOrientation.portraitDown:
-        deviceRotationDegrees = 180;
-        break;
-      case DeviceOrientation.landscapeRight:
-        deviceRotationDegrees = 270;
-        break;
-    }
-
-    InputImageRotation? rotation;
-    if (Platform.isAndroid) {
-      int rotationCompensation;
-      if (camera.lensDirection == CameraLensDirection.front) {
-        rotationCompensation = (sensorOrientation + deviceRotationDegrees) % 360;
-      } else {
-        rotationCompensation = (sensorOrientation - deviceRotationDegrees + 360) % 360;
-      }
-      rotationCompensation = (rotationCompensation + _aiRotationOffset * 90) % 360;
-      rotation = InputImageRotationValue.fromRawValue(rotationCompensation);
-    } else {
-      final comp = (sensorOrientation + _aiRotationOffset * 90) % 360;
-      rotation = InputImageRotationValue.fromRawValue(comp);
-    }
-
-    rotation ??= InputImageRotationValue.fromRawValue(sensorOrientation) ?? InputImageRotation.rotation0deg;
-
-    // ML Kit trả boundingBox theo ảnh ĐÃ XOAY ĐỨNG => xoay 90°/270° thì đổi chỗ rộng/cao
-    final swap = rotation == InputImageRotation.rotation90deg || rotation == InputImageRotation.rotation270deg;
-    _faceUprightW = (swap ? image.height : image.width).toDouble();
-    _faceUprightH = (swap ? image.width : image.height).toDouble();
-
-    Uint8List bytes;
-    int bytesPerRow;
-
-    if (image.planes.length == 1) {
-      bytes = image.planes.first.bytes;
-      bytesPerRow = image.planes.first.bytesPerRow;
-    } else if (Platform.isAndroid && image.planes.length >= 3) {
-      bytes = _yuv420ToNv21(image);
-      bytesPerRow = image.width;
-    } else {
-      bytes = image.planes.first.bytes;
-      bytesPerRow = image.planes.first.bytesPerRow;
-    }
-
-    return InputImage.fromBytes(
-      bytes: bytes,
-      metadata: InputImageMetadata(
-        size: Size(image.width.toDouble(), image.height.toDouble()),
-        rotation: rotation,
-        format: InputImageFormat.nv21,
-        bytesPerRow: bytesPerRow,
-      ),
-    );
-  }
-
   void calibrateNeutral() {
-    if (!_cameraAvailable || _cameraController == null || !_cameraController!.value.isInitialized) {
+    if (!_cameraAvailable || !_backend.isReady) {
       _isCalibrating = false;
       return;
     }
@@ -1619,11 +1279,7 @@ class FaceMotionController extends ChangeNotifier {
 
   @override
   void dispose() {
-    _cameraController?.stopImageStream();
-    _cameraController?.dispose();
-    _faceDetector?.close();
-    _handSub?.cancel();
-    _handPlugin?.dispose();
+    _backend.dispose();
     super.dispose();
   }
 }
