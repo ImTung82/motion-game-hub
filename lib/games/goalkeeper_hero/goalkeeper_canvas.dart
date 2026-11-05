@@ -67,6 +67,9 @@ class _GoalkeeperPainter extends CustomPainter {
     // 4. VẼ KHUNG THÀNH VÀ LƯỚI 3D
     _drawGoalNetAndPosts(canvas, layout, w, h);
 
+    // 4b. CHIA 2 NỬA KHUNG THÀNH: nửa trái = tay trái (cyan), nửa phải = tay phải (hồng)
+    if (!engine.touchControl) _drawHandZones(canvas, layout, w, h);
+
     // 5. VÒNG BÁO TRƯỚC ĐIỂM BÓNG TỚI
     if (engine.difficulty.showTargetMarker) _drawTargetMarkers(canvas, layout);
 
@@ -377,6 +380,96 @@ class _GoalkeeperPainter extends CustomPainter {
     canvas.drawCircle(Offset(goalRight, crossbarY), 9.0 * u, postPaint);
   }
 
+  static const Color _leftColor = Color(0xFF00E5FF);
+  static const Color _rightColor = Color(0xFFFF4081);
+
+  /// Camera chia đôi: tay ở nửa trái điều khiển găng cyan, tay ở nửa phải điều khiển găng hồng.
+  /// Tô 2 nửa khung thành theo màu găng + vạch giữa đứt quãng + nhãn, để bé biết mỗi tay giữ 1 bên.
+  /// Lúc chờ giơ tay: bàn tay to nhún nhảy ở nửa còn thiếu tay.
+  void _drawHandZones(Canvas canvas, KeeperLayout l, double w, double h) {
+    final u = l.u;
+    final double centerX = w / 2;
+    final double goalW = w * 0.88;
+    final double top = h * 0.16;
+    final double bottom = h * 0.90;
+    final double halfW = goalW / 2;
+    final bool waiting = engine.phase == KeeperPhase.waitingHands || engine.phase == KeeperPhase.handsReady;
+    final double t = engine.effectTime;
+
+    // 1. Nền 2 nửa: nửa chưa có tay thì nhấp nháy để gọi tay đó
+    for (final (glove, color, left) in [
+      (engine.leftGlove, _leftColor, centerX - halfW),
+      (engine.rightGlove, _rightColor, centerX),
+    ]) {
+      double alpha = glove.detected ? 0.16 : 0.11;
+      if (waiting && !glove.detected) alpha = 0.14 + 0.16 * (0.5 + 0.5 * math.sin(t * 5));
+      canvas.drawRect(Rect.fromLTWH(left, top, halfW, bottom - top), Paint()..color = color.withValues(alpha: alpha));
+    }
+
+    // 2. Vạch giữa đứt quãng (1 path = 1 lệnh vẽ)
+    final double dash = 14 * u;
+    final double gap = 10 * u;
+    final path = Path();
+    for (double y = top + 8 * u; y < bottom; y += dash + gap) {
+      path
+        ..moveTo(centerX, y)
+        ..lineTo(centerX, math.min(y + dash, bottom));
+    }
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.75)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 4 * u
+        ..strokeCap = StrokeCap.round,
+    );
+
+    // 3. Nhãn 2 bên vạch giữa, sát chân khung thành
+    final tagStyle = TextStyle(color: Colors.white, fontSize: 13 * u, fontWeight: FontWeight.w900, letterSpacing: 0.6);
+    final double tagY = bottom - 12 * u;
+    _drawZoneTag(canvas, u, TextPainterCache.get('🤚 LEFT HAND', tagStyle), _leftColor, Offset(centerX - 10 * u, tagY), alignRight: true);
+    _drawZoneTag(canvas, u, TextPainterCache.get('RIGHT HAND ✋', tagStyle), _rightColor, Offset(centerX + 10 * u, tagY), alignRight: false);
+
+    // 4. Chờ giơ tay: bàn tay to nhún nhảy ở nửa còn thiếu tay (đúng chỗ bé cần đưa tay vào),
+    // đặt cao hơn găng mờ đang nằm chờ để không bị che
+    if (waiting) {
+      final handStyle = TextStyle(fontSize: 64 * u);
+      for (final (glove, emoji, cx, phase) in [
+        (engine.leftGlove, '🤚', centerX - halfW / 2, 0.0),
+        (engine.rightGlove, '✋', centerX + halfW / 2, math.pi),
+      ]) {
+        if (glove.detected) continue;
+        final painter = TextPainterCache.get(emoji, handStyle);
+        final double bob = math.sin(t * 6 + phase) * 8 * u;
+        final double scale = 1.0 + 0.08 * math.sin(t * 6 + phase);
+        canvas.save();
+        canvas.translate(cx, h * 0.36 + bob);
+        canvas.scale(scale);
+        painter.paint(canvas, Offset(-painter.width / 2, -painter.height / 2));
+        canvas.restore();
+      }
+    }
+  }
+
+  /// Nhãn viên thuốc màu găng; [anchor] là mép trong (sát vạch giữa) và đáy của nhãn
+  void _drawZoneTag(Canvas canvas, double u, TextPainter text, Color color, Offset anchor, {required bool alignRight}) {
+    final double padX = 10 * u;
+    final double padY = 5 * u;
+    final double tagW = text.width + padX * 2;
+    final double tagH = text.height + padY * 2;
+    final double left = alignRight ? anchor.dx - tagW : anchor.dx;
+    final rect = RRect.fromRectAndRadius(Rect.fromLTWH(left, anchor.dy - tagH, tagW, tagH), Radius.circular(tagH / 2));
+    canvas.drawRRect(rect, Paint()..color = color.withValues(alpha: 0.85));
+    canvas.drawRRect(
+      rect,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2 * u,
+    );
+    text.paint(canvas, Offset(left + padX, anchor.dy - tagH + padY));
+  }
+
   /// Vòng sáng trên lưới đánh dấu chỗ bóng sẽ tới: càng gần càng rõ & nhấp nháy càng nhanh
   void _drawTargetMarkers(Canvas canvas, KeeperLayout l) {
     final u = l.u;
@@ -497,7 +590,7 @@ class _GoalkeeperPainter extends CustomPainter {
       canvas: canvas,
       layout: l,
       glove: engine.leftGlove,
-      mainColor: const Color(0xFF00E5FF),
+      mainColor: _leftColor,
       label: 'LEFT',
     );
 
@@ -506,7 +599,7 @@ class _GoalkeeperPainter extends CustomPainter {
       canvas: canvas,
       layout: l,
       glove: engine.rightGlove,
-      mainColor: const Color(0xFFFF4081),
+      mainColor: _rightColor,
       label: 'RIGHT',
     );
   }
