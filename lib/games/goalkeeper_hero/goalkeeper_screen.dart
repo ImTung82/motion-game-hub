@@ -10,6 +10,7 @@ import '../../ui/widgets/kid_ui.dart';
 import '../../ui/widgets/lives_hearts.dart';
 import '../../ui/widgets/listenable_selector.dart';
 import '../../ui/widgets/rabbit_mascot.dart';
+import '../../ui/widgets/ready_gate.dart';
 import '../../ui/widgets/score_fly_layer.dart';
 import 'goalkeeper_canvas.dart';
 import 'goalkeeper_engine.dart';
@@ -96,7 +97,7 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
       if (_oopsTimer <= 0) setState(() {});
     }
 
-    _engine.update(clampedDt, widget.motionController.state);
+    _engine.update(clampedDt, widget.motionController.state, cameraAvailable: widget.motionController.cameraAvailable);
   }
 
   void _startGame() {
@@ -235,6 +236,7 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
                 listenable: _engine,
                 selector: () => (
                   _engine.phase,
+                  _engine.readyProgress,
                   _engine.countdownNumber,
                   _engine.countdownFraction,
                   _engine.goFlash,
@@ -442,6 +444,17 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
     switch (_engine.phase) {
       case KeeperPhase.waitingHands:
         return Center(child: _buildHandsUpPanel(s));
+      case KeeperPhase.handsReady:
+        return Center(
+          child: ReadyConfirmedPanel(
+            scale: s,
+            progress: _engine.readyProgress,
+            icons: const [
+              ReadyIcon(emoji: '🤚', color: Color(0xFF00B8D4), label: 'LEFT'),
+              ReadyIcon(emoji: '✋', color: Color(0xFFFF4081), label: 'RIGHT'),
+            ],
+          ),
+        );
       case KeeperPhase.countdown:
         final pop = 1.0 + 0.35 * _engine.countdownFraction;
         return Center(
@@ -911,6 +924,11 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
       headline = 'HANDS UP! 👐';
       caption = 'Show me';
       footnote = 'both hands';
+    } else if (_engine.phase == KeeperPhase.handsReady) {
+      mood = RabbitMood.happy;
+      headline = 'GREAT! 🎉';
+      caption = 'Get ready...';
+      footnote = 'Keep both hands up';
     } else if (_oopsTimer > 0) {
       headline = 'OOPS! 🙈';
       caption = 'Never mind!';

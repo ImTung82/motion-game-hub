@@ -29,7 +29,8 @@ class _EggSmasherScreenState extends State<EggSmasherScreen> with SingleTickerPr
   final ReadyGate _readyGate = ReadyGate();
   late final Ticker _ticker;
   Duration _lastTick = Duration.zero;
-  double _animationValue = 0.0;
+  // Thời gian hoạt ảnh (giây) cho canvas: ValueNotifier để painter đọc giá trị mới mỗi khung
+  final ValueNotifier<double> _time = ValueNotifier(0.0);
 
   // Điểm bay: điểm trên HUD chỉ tăng khi "+N" bay tới nơi
   final GlobalKey<ScoreFlyLayerState> _flyLayerKey = GlobalKey<ScoreFlyLayerState>();
@@ -70,10 +71,10 @@ class _EggSmasherScreenState extends State<EggSmasherScreen> with SingleTickerPr
     _lastTick = elapsed;
 
     final clampedDt = dt.clamp(0.001, 0.05);
-    _animationValue += clampedDt;
+    _time.value += clampedDt;
 
     final ctrl = widget.motionController;
-    if (!_engine.isPaused) _readyGate.update(clampedDt, ctrl.state, cameraAvailable: ctrl.cameraAvailable);
+    if (!_engine.isPaused) _readyGate.update(clampedDt, ctrl.state, cameraAvailable: ctrl.cameraAvailable, calibrating: ctrl.isCalibrating);
     if (!_readyGate.isDone) return; // chưa thấy mặt / tay hoặc đang đếm ngược: game đứng yên
 
     _engine.update(clampedDt, ctrl.state);
@@ -91,6 +92,7 @@ class _EggSmasherScreenState extends State<EggSmasherScreen> with SingleTickerPr
   void dispose() {
     widget.motionController.setCameraPipQuietly(_prevShowCameraPip, persist: true);
     _ticker.dispose();
+    _time.dispose();
     _readyGate.dispose();
     _engine.dispose();
     super.dispose();
@@ -169,7 +171,7 @@ class _EggSmasherScreenState extends State<EggSmasherScreen> with SingleTickerPr
                     size: Size(constraints.maxWidth, constraints.maxHeight),
                     painter: EggSmasherCanvasPainter(
                       engine: _engine,
-                      animationValue: _animationValue,
+                      time: _time,
                     ),
                   ),
                 ),

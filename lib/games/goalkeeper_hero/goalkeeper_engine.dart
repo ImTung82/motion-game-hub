@@ -3,14 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../motion/motion_state.dart';
 import '../../services/sound_service.dart';
+import '../../ui/widgets/ready_gate.dart' show ReadyTiming;
 import 'goalkeeper_models.dart';
 
 class GoalkeeperEngine extends ChangeNotifier {
   static const int maxLives = 3;
   static const double kickerWindup = 0.7; // Thời gian cầu thủ chạy đà trước mỗi cú sút
   static const double ballStartY = 0.25; // Chấm phạt đền
-  static const double _waitHandsTimeout = 5.0; // Chờ tối đa 5s để thấy đủ 2 tay rồi vẫn bắt đầu
-  static const double _countdownSeconds = 3.0;
   static const String _bestKey = 'goalkeeper_best_stars';
   static const String _difficultyKey = 'goalkeeper_difficulty';
   static const String _topicKey = 'goalkeeper_topic';
@@ -47,7 +46,13 @@ class GoalkeeperEngine extends ChangeNotifier {
   final List<WordItem> savedWords = []; // Bộ sưu tập từ bé đã cản được trong ván
 
   // Chờ tay & đếm ngược
-  double _waitTime = 0.0;
+  // Bước chuẩn bị (cùng luật với ReadyGate của các game khác): phải thấy ĐỦ 2 tay mới bắt đầu, không tự
+  // vào game khi hết giờ chờ; thấy đủ thì giữ thông báo "GREAT!" vài giây; mất tay => quay lại bước chờ.
+  double _readyTime = 0.0;
+  double _lostTime = 0.0;
+
+  /// 0 -> 1 trong lúc giữ thông báo "GREAT! Get ready"
+  double get readyProgress => (_readyTime / ReadyTiming.confirmSeconds).clamp(0.0, 1.0);
   double _countdown = 0.0;
   int _lastCountdownNumber = 0;
   int get countdownNumber => _countdown.ceil();
@@ -155,7 +160,8 @@ class GoalkeeperEngine extends ChangeNotifier {
     isNewHighScore = false;
     isPaused = false;
     phase = KeeperPhase.waitingHands;
-    _waitTime = 0.0;
+    _readyTime = 0.0;
+    _lostTime = 0.0;
     _spawnTimer = 1.0; // Sút quả đầu tiên 1s sau khi "GO!"
     _gameTime = 0.0;
     _deck = [];
@@ -186,12 +192,28 @@ class GoalkeeperEngine extends ChangeNotifier {
 
   void _beginCountdown() {
     phase = KeeperPhase.countdown;
-    _countdown = _countdownSeconds;
+    _lostTime = 0.0;
+    _countdown = ReadyTiming.countdownSeconds;
     _lastCountdownNumber = countdownNumber;
     SoundService.instance.playCountdownTick();
   }
 
-  void update(double dt, MotionState motionState) {
+  /// Mất 1 trong 2 tay quá lâu lúc đang chuẩn bị / đếm ngược => quay lại bước chờ giơ tay (true)
+  bool _lostHands(double dt, bool bothHands, bool cameraAvailable) {
+    if (bothHands || !cameraAvailable) {
+      _lostTime = 0.0;
+      return false;
+    }
+    _lostTime += dt;
+    if (_lostTime < ReadyTiming.lostGraceSeconds) return false;
+    phase = KeeperPhase.waitingHands;
+    _readyTime = 0.0;
+    _lostTime = 0.0;
+    return true;
+  }
+
+  /// [cameraAvailable] = false (chơi cảm ứng): không chờ giơ tay
+  void update(double dt, MotionState motionState, {bool cameraAvailable = true}) {
     if (isPaused || phase == KeeperPhase.setup || phase == KeeperPhase.gameOver) return;
 
     effectTime += dt;
@@ -203,11 +225,21 @@ class GoalkeeperEngine extends ChangeNotifier {
 
     switch (phase) {
       case KeeperPhase.waitingHands:
-        _waitTime += dt;
-        if ((leftGlove.detected && rightGlove.detected) || _waitTime >= _waitHandsTimeout) {
+        if (!cameraAvailable) {
           _beginCountdown();
+        } else if (leftGlove.detected && rightGlove.detected) {
+          phase = KeeperPhase.handsReady;
+          _readyTime = 0.0;
+          _lostTime = 0.0;
+          SoundService.instance.playClick();
         }
+      case KeeperPhase.handsReady:
+        final bool both = leftGlove.detected && rightGlove.detected;
+        if (_lostHands(dt, both, cameraAvailable)) break;
+        if (both) _readyTime += dt;
+        if (_readyTime >= ReadyTiming.confirmSeconds) _beginCountdown();
       case KeeperPhase.countdown:
+        if (_lostHands(dt, leftGlove.detected && rightGlove.detected, cameraAvailable)) break;
         _countdown -= dt;
         if (_countdown <= 0) {
           phase = KeeperPhase.playing;

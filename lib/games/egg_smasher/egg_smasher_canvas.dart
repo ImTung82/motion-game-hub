@@ -1,23 +1,31 @@
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../ui/widgets/ambient_decor.dart';
 import '../../ui/widgets/text_painter_cache.dart';
 import 'egg_smasher_engine.dart';
 import 'egg_smasher_models.dart';
 
 class EggSmasherCanvasPainter extends CustomPainter {
   final EggSmasherEngine engine;
-  final double animationValue;
+  /// Thời gian hoạt ảnh (giây), màn chơi tăng mỗi khung. Đọc lúc vẽ (không chụp lúc build) để cảnh vật
+  /// chuyển động liên tục, kể cả lúc chờ bé vào vị trí / đếm ngược (engine chưa chạy).
+  final ValueListenable<double> time;
 
   EggSmasherCanvasPainter({
     required this.engine,
-    required this.animationValue,
-  }) : super(repaint: engine);
+    required this.time,
+  }) : super(repaint: Listenable.merge([engine, time]));
+
+  double get animationValue => time.value;
 
   @override
   void paint(Canvas canvas, Size size) {
     if (size.width <= 0 || size.height <= 0) return;
 
-    // 1. NỀN: ảnh bãi cỏ (assets/images/bg_egg_smasher.png) được vẽ bằng widget Image phía dưới canvas
+    // 1. NỀN: ảnh bãi cỏ (assets/images/bg_egg_smasher.png) được vẽ bằng widget Image phía dưới canvas,
+    //    canvas thêm cảnh vật chuyển động phía trên ảnh, dưới trứng: mây trôi, chim bay, bướm lượn
+    _drawAmbience(canvas, size);
 
     // 2. VẼ TỔ RƠM (NESTS) CHO CÁC QUẢ TRỨNG
     for (final egg in engine.eggs) {
@@ -46,6 +54,34 @@ class EggSmasherCanvasPainter extends CustomPainter {
 
     // 7. VẼ BÚA ĐẬP & CON TRỎ TAY
     _drawHammerCursor(canvas, size);
+  }
+
+  // ===========================================================================
+  // 1. CẢNH VẬT CHUYỂN ĐỘNG (tránh vùng trứng, búa và thỏ linh vật góc trái dưới)
+  // ===========================================================================
+  void _drawAmbience(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    final t = animationValue;
+
+    AmbientDecor.drawClouds(
+      canvas,
+      Rect.fromLTWH(0, 0, w, h * 0.4),
+      t,
+      const [(0.15, 0.22, 1.0, 0.012), (0.55, 0.12, 0.8, 0.009), (0.85, 0.5, 0.6, 0.015)],
+      size: h * 0.035,
+    );
+
+    final birdSky = Rect.fromLTWH(0, h * 0.18, w, h * 0.16); // dưới thanh HUD
+    AmbientDecor.drawBirdFlock(canvas, birdSky, t, size: h * 0.024, period: 20);
+    AmbientDecor.drawBirdFlock(canvas, birdSky, t, size: h * 0.019, period: 27, phase: 0.5, count: 2, leftToRight: false);
+
+    final b = h * 0.032;
+    AmbientDecor.drawButterfly(canvas, Rect.fromLTWH(w * 0.86, h * 0.5, w * 0.1, h * 0.25), t,
+        size: b, color: const Color(0xFFFF8A65), seed: 0.3);
+    AmbientDecor.drawButterfly(canvas, Rect.fromLTWH(w * 0.32, h * 0.4, w * 0.36, h * 0.1), t,
+        size: b * 0.85, color: const Color(0xFFBA68C8), seed: 1.7);
+    AmbientDecor.drawButterfly(canvas, Rect.fromLTWH(w * 0.12, h * 0.26, w * 0.14, h * 0.1), t,
+        size: b * 0.8, color: const Color(0xFFFFD54F), seed: 3.1);
   }
 
   // ===========================================================================
