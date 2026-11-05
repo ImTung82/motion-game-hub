@@ -7,6 +7,17 @@ Thư mục này được copy nguyên vào bản build web.
 
 Xem hiệu năng trong DevTools: `motionBridge.stats`.
 
+## Giảm trễ nhận diện (áp dụng cho mọi thiết bị)
+
+- **Số tay theo game:** game 1 tay chỉ tìm 1 tay (`numHands: 1`), hub/game 2 tay mới tìm 2
+  (`FaceMotionController.holdTwoHands()` / `releaseTwoHands()`). MediaPipe chỉ chạy bước tìm bàn tay (tốn nhất)
+  khi số tay đang bám < `numHands`, nên để 2 mà chỉ giơ 1 tay thì chậm gấp ~2 lần.
+- **Tự chọn GPU / CPU:** worker đo thời gian nhận diện trên GPU ngay lúc đang chơi; GPU chậm (> 30ms) thì thử
+  CPU, giữ bên nhanh hơn rõ rệt và nhớ theo GPU + phiên bản Chrome (`stats.choice`, `stats.bench`).
+  Ép cố định: `?delegate=GPU` / `?delegate=CPU`. Đo lại: `motionBridge.debug.resetDelegateChoice()` rồi tải lại trang.
+- **Lọc tín hiệu theo thời gian** (`lib/motion/signal_filters.dart`): máy nhận diện chậm không bị trễ hơn
+  máy nhanh; vị trí tay & góc đầu dùng bộ lọc One Euro (đứng yên hết rung, vung nhanh hết trễ).
+
 ## Thư viện & model (tự host, không phụ thuộc CDN)
 
 | File | Nguồn |

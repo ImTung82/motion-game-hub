@@ -38,12 +38,28 @@ class _CalibrationDialogState extends State<CalibrationDialog> {
     } else {
       _activeMode = widget.controller.inputMode == MotionInputMode.hand ? CalibrationMode.singleHand : CalibrationMode.face;
     }
+    _syncTwoHands();
   }
 
   @override
   void dispose() {
+    if (_holdingTwoHands) widget.controller.releaseTwoHands();
     _settingsScroll.dispose();
     super.dispose();
+  }
+
+  // Thẻ "2 tay" cần nhận diện 2 tay; thẻ khác chỉ cần 1 (nhanh hơn)
+  bool _holdingTwoHands = false;
+
+  void _syncTwoHands() {
+    final bool want = _activeMode == CalibrationMode.dualHand;
+    if (want == _holdingTwoHands) return;
+    _holdingTwoHands = want;
+    if (want) {
+      widget.controller.holdTwoHands();
+    } else {
+      widget.controller.releaseTwoHands();
+    }
   }
 
   void _triggerCalibrate() {
@@ -228,6 +244,7 @@ class _CalibrationDialogState extends State<CalibrationDialog> {
                 title: '🙂 FACE',
                 onTap: () => setState(() {
                   _activeMode = CalibrationMode.face;
+                  _syncTwoHands();
                   ctrl.inputMode = MotionInputMode.face;
                 }),
               ),
@@ -236,6 +253,7 @@ class _CalibrationDialogState extends State<CalibrationDialog> {
                 title: '✋ 1 HAND',
                 onTap: () => setState(() {
                   _activeMode = CalibrationMode.singleHand;
+                  _syncTwoHands();
                   ctrl.inputMode = MotionInputMode.hand;
                 }),
               ),
@@ -244,6 +262,7 @@ class _CalibrationDialogState extends State<CalibrationDialog> {
                 title: '👐 2 HANDS',
                 onTap: () => setState(() {
                   _activeMode = CalibrationMode.dualHand;
+                  _syncTwoHands();
                   ctrl.inputMode = MotionInputMode.hand;
                 }),
               ),
