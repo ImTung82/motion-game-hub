@@ -76,6 +76,15 @@ class GoalkeeperEngine extends ChangeNotifier {
   double screenShake = 0.0; // Rung màn hình khi bắt bóng 2 tay
   double crowdJump = 0.0; // Khán giả nhảy lên ăn mừng
 
+  // Chơi chạm / chuột: đôi găng đi theo ngón tay (toạ độ game), null = chưa chạm -> đứng giữa khung thành
+  Offset? _touchPoint;
+
+  /// Ngón tay / chuột đang ở [screenPos] (pixel trong vùng vẽ)
+  void touchMoveTo(Offset screenPos) {
+    final p = layout.fromScreen(screenPos);
+    _touchPoint = Offset(p.dx.clamp(-0.95, 0.95), p.dy.clamp(-0.85, 0.85));
+  }
+
   // Callbacks thông báo ra ngoài Screen & HUD
   Function(SaveEvent)? onBallSaved;
   VoidCallback? onGoalConceded;
@@ -160,6 +169,7 @@ class GoalkeeperEngine extends ChangeNotifier {
     isNewHighScore = false;
     isPaused = false;
     phase = KeeperPhase.waitingHands;
+    _touchPoint = null;
     _readyTime = 0.0;
     _lostTime = 0.0;
     _spawnTimer = 1.0; // Sút quả đầu tiên 1s sau khi "GO!"
@@ -199,8 +209,8 @@ class GoalkeeperEngine extends ChangeNotifier {
   }
 
   /// Mất 1 trong 2 tay quá lâu lúc đang chuẩn bị / đếm ngược => quay lại bước chờ giơ tay (true)
-  bool _lostHands(double dt, bool bothHands, bool cameraAvailable) {
-    if (bothHands || !cameraAvailable) {
+  bool _lostHands(double dt, bool bothHands, bool touchMode) {
+    if (bothHands || touchMode) {
       _lostTime = 0.0;
       return false;
     }
@@ -212,20 +222,25 @@ class GoalkeeperEngine extends ChangeNotifier {
     return true;
   }
 
-  /// [cameraAvailable] = false (chơi cảm ứng): không chờ giơ tay
-  void update(double dt, MotionState motionState, {bool cameraAvailable = true}) {
+  /// [touchMode] (không có camera / bật chơi chạm trong Cài đặt): không chờ giơ tay, găng đi theo ngón tay
+  void update(double dt, MotionState motionState, {bool touchMode = false}) {
     if (isPaused || phase == KeeperPhase.setup || phase == KeeperPhase.gameOver) return;
 
     effectTime += dt;
 
     // Găng tay luôn bám theo tay (kể cả lúc chờ & đếm ngược) để bé thấy mình đã vào vị trí
-    _updateGloves(dt, motionState);
+    final bool anyHand = motionState.leftHand.detected || motionState.rightHand.detected;
+    if (touchMode && !anyHand) {
+      _updateTouchGloves(dt);
+    } else {
+      _updateGloves(dt, motionState);
+    }
     _updateEffects(dt);
     _updateParticles(dt);
 
     switch (phase) {
       case KeeperPhase.waitingHands:
-        if (!cameraAvailable) {
+        if (touchMode) {
           _beginCountdown();
         } else if (leftGlove.detected && rightGlove.detected) {
           phase = KeeperPhase.handsReady;
@@ -235,11 +250,11 @@ class GoalkeeperEngine extends ChangeNotifier {
         }
       case KeeperPhase.handsReady:
         final bool both = leftGlove.detected && rightGlove.detected;
-        if (_lostHands(dt, both, cameraAvailable)) break;
+        if (_lostHands(dt, both, touchMode)) break;
         if (both) _readyTime += dt;
         if (_readyTime >= ReadyTiming.confirmSeconds) _beginCountdown();
       case KeeperPhase.countdown:
-        if (_lostHands(dt, leftGlove.detected && rightGlove.detected, cameraAvailable)) break;
+        if (_lostHands(dt, leftGlove.detected && rightGlove.detected, touchMode)) break;
         _countdown -= dt;
         if (_countdown <= 0) {
           phase = KeeperPhase.playing;
@@ -297,6 +312,23 @@ class GoalkeeperEngine extends ChangeNotifier {
     rightGlove.y += (rightGlove.targetY - rightGlove.y) * (dt * lerpFactor).clamp(0.0, 1.0);
     if (rightGlove.impactAnim > 0) {
       rightGlove.impactAnim = math.max(0.0, rightGlove.impactAnim - dt * 4.0);
+    }
+  }
+
+  /// Chơi chạm: 2 găng đứng sát nhau quanh ngón tay (như đang ôm bóng), đi theo ngón tay / chuột
+  void _updateTouchGloves(double dt) {
+    const double lerpFactor = 22.0; // nhanh hơn camera: chạm là găng tới ngay
+    final center = _touchPoint ?? const Offset(0.0, 0.1);
+    // Khoảng cách 2 găng = 1.1 lần cỡ găng (pixel) quy ra toạ độ game theo bề ngang
+    final double halfGap = layout.gloveSize * 0.55 / (layout.size.width * 0.44);
+
+    for (final (glove, side) in [(leftGlove, -1.0), (rightGlove, 1.0)]) {
+      glove.detected = true;
+      glove.targetX = (center.dx + side * halfGap).clamp(-0.95, 0.95);
+      glove.targetY = center.dy;
+      glove.x += (glove.targetX - glove.x) * (dt * lerpFactor).clamp(0.0, 1.0);
+      glove.y += (glove.targetY - glove.y) * (dt * lerpFactor).clamp(0.0, 1.0);
+      if (glove.impactAnim > 0) glove.impactAnim = math.max(0.0, glove.impactAnim - dt * 4.0);
     }
   }
 

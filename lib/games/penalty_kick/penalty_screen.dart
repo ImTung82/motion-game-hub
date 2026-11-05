@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import '../../motion/face_motion_controller.dart';
@@ -13,6 +14,7 @@ import '../../ui/widgets/rabbit_mascot.dart';
 import '../../ui/widgets/lives_hearts.dart';
 import '../../ui/widgets/ready_gate.dart';
 import '../../ui/widgets/score_fly_layer.dart';
+import '../../ui/widgets/touch_hint.dart';
 import 'penalty_canvas.dart';
 import 'penalty_engine.dart';
 import 'penalty_models.dart';
@@ -80,7 +82,8 @@ class _PenaltyScreenState extends State<PenaltyScreen> with SingleTickerProvider
     _time.value += clampedDt;
 
     final ctrl = widget.motionController;
-    if (!_engine.isPaused) _readyGate.update(clampedDt, ctrl.state, cameraAvailable: ctrl.cameraAvailable, calibrating: ctrl.isCalibrating);
+    // Chơi chạm: không chờ thấy mặt / tay, đếm ngược luôn
+    if (!_engine.isPaused) _readyGate.update(clampedDt, ctrl.state, cameraAvailable: !ctrl.touchMode, calibrating: ctrl.isCalibrating);
     if (!_readyGate.isDone) return; // chưa thấy mặt / tay hoặc đang đếm ngược: game đứng yên
 
     _engine.update(clampedDt, ctrl.state);
@@ -122,6 +125,25 @@ class _PenaltyScreenState extends State<PenaltyScreen> with SingleTickerProvider
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // CHƠI CHẠM / CHUỘT (không có camera hoặc bật trong Cài đặt)
+  // ---------------------------------------------------------------------------
+  bool _touchUsed = false; // đã chạm lần đầu -> ẩn gợi ý
+
+  /// Toạ độ x màn hình -> toạ độ trong khung thành (khớp PenaltyCanvasPainter: tâm 0.5w, nửa khung 0.25w)
+  double _goalXAt(double dx, double width) => (dx - width * 0.5) / (width * 0.25);
+
+  void _onTapDown(TapDownDetails d, double width) {
+    if (!widget.motionController.touchMode || !_readyGate.isDone) return; // chưa "GO!" thì chưa cho sút
+    if (!_touchUsed) setState(() => _touchUsed = true);
+    _engine.touchShootAt(_goalXAt(d.localPosition.dx, width));
+  }
+
+  void _onHover(PointerHoverEvent e, double width) {
+    if (!widget.motionController.touchMode || !_readyGate.isDone) return;
+    _engine.touchAim(_goalXAt(e.localPosition.dx, width));
+  }
+
   void _restart() {
     setState(() => _shownScore = 0);
     _engine.startNewMatch(announce: false);
@@ -145,14 +167,24 @@ class _PenaltyScreenState extends State<PenaltyScreen> with SingleTickerProvider
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 1. Sân bóng, khán đài & khung thành
+          // 1. Sân bóng, khán đài & khung thành. Chơi chạm: chạm hình nào sút hình đó, rê chuột để ngắm
           // RepaintBoundary: canvas vẽ lại mỗi khung, HUD phía trên không phải vẽ lại theo
-          RepaintBoundary(
-            child: CustomPaint(
-              painter: PenaltyCanvasPainter(
-                engine: _engine,
-                time: _time,
-                ballImage: _ballImage,
+          LayoutBuilder(
+            builder: (context, constraints) => MouseRegion(
+              onHover: (e) => _onHover(e, constraints.maxWidth),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: (d) => _onTapDown(d, constraints.maxWidth),
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                    size: constraints.biggest,
+                    painter: PenaltyCanvasPainter(
+                      engine: _engine,
+                      time: _time,
+                      ballImage: _ballImage,
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
@@ -179,31 +211,19 @@ class _PenaltyScreenState extends State<PenaltyScreen> with SingleTickerProvider
           //    Đứng trên logo góc dưới trái, bóng thoại bên phải trên mặt sân (không che khung thành)
           _buildRabbitMascot(s, pad),
 
-          // 6. Nút sút cảm ứng (mặc định ẩn, chỉ hiện nếu bật trong Cài đặt)
-          ListenableSelector(
-            listenable: widget.motionController,
-            selector: () => widget.motionController.showTouchControls,
-            builder: (context, _) {
-              if (!widget.motionController.showTouchControls) return const SizedBox.shrink();
-              return Positioned(
-                right: pad.right + 20 * s,
-                bottom: pad.bottom + 20 * s,
-                child: SizedBox(
-                  width: 150 * s,
-                  child: KidButton(
-                    icon: Icons.sports_soccer,
-                    label: 'KICK!',
-                    color: KidColors.pink,
-                    shadowColor: KidColors.pinkDark,
-                    height: 64 * s,
-                    onPressed: () {
-                      if (_readyGate.isDone) _engine.touchShoot(); // chưa "GO!" thì chưa cho sút
-                    },
-                  ),
-                ),
-              );
-            },
-          ),
+          // 6. Gợi ý chơi chạm (ẩn sau lần chạm đầu): giữa sân, dưới khung thành, trên quả bóng
+          if (!_touchUsed)
+            ListenableSelector(
+              listenable: Listenable.merge([widget.motionController, _readyGate]),
+              selector: () => widget.motionController.touchMode && _readyGate.isDone,
+              builder: (context, _) {
+                if (!widget.motionController.touchMode || !_readyGate.isDone) return const SizedBox.shrink();
+                return Align(
+                  alignment: const Alignment(0, 0.05),
+                  child: TouchHint(text: 'Tap the right picture to kick!', scale: s),
+                );
+              },
+            ),
 
           // 6b. Điểm bay về ô tổng điểm
           Positioned.fill(

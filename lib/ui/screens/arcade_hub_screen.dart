@@ -66,13 +66,14 @@ class _ArcadeHubScreenState extends State<ArcadeHubScreen> {
                 selector: () {
                   final ctrl = widget.motionController;
                   final state = ctrl.state;
-                  return (ctrl.inputMode, ctrl.cameraAvailable, state.faceDetected, state.handDetected,
+                  return (ctrl.inputMode, ctrl.cameraAvailable, ctrl.noCamera, state.faceDetected, state.handDetected,
                       state.isChomping, state.isHandFist, state.tiltDirection);
                 },
                 builder: (context, _) {
                   final ctrl = widget.motionController;
                   final state = ctrl.state;
                   final isHandMode = ctrl.inputMode == MotionInputMode.hand;
+                  final noCamera = ctrl.noCamera; // không có camera: hướng dẫn chơi bằng chạm / chuột
 
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -133,9 +134,11 @@ class _ArcadeHubScreenState extends State<ArcadeHubScreen> {
                                       title: 'FRUITS KICK',
                                       art: '⚽🍎🍌',
                                       description: 'Listen to the fruit name, then kick the ball into the goal with the matching picture!',
-                                      steps: isHandMode
-                                          ? const [('✋', 'Move your open hand to aim'), ('✊', 'Make a fist to kick')]
-                                          : const [('👤', 'Tilt your head to aim'), ('⬇️', 'Nod or open your mouth to kick')],
+                                      steps: noCamera
+                                          ? const [('👆', 'Tap the matching picture to kick')]
+                                          : isHandMode
+                                              ? const [('✋', 'Move your open hand to aim'), ('✊', 'Make a fist to kick')]
+                                              : const [('👤', 'Tilt your head to aim'), ('⬇️', 'Nod or open your mouth to kick')],
                                       color: KidColors.green,
                                       colorDark: KidColors.greenDark,
                                       bannerColors: const [Color(0xFFA5E887), Color(0xFF66BB6A)],
@@ -148,9 +151,11 @@ class _ArcadeHubScreenState extends State<ArcadeHubScreen> {
                                       title: 'EGG SMASHER',
                                       art: '🥚🔨🐣',
                                       description: 'Listen to the word, then smash the egg with the matching picture to hatch a friend!',
-                                      steps: isHandMode
-                                          ? const [('✋', 'Move your open hand to pick an egg'), ('✊', 'Make a fist to smash')]
-                                          : const [('👤', 'Tilt your head to pick an egg'), ('⬇️', 'Nod down to smash')],
+                                      steps: noCamera
+                                          ? const [('👆', 'Tap the matching egg to smash')]
+                                          : isHandMode
+                                              ? const [('✋', 'Move your open hand to pick an egg'), ('✊', 'Make a fist to smash')]
+                                              : const [('👤', 'Tilt your head to pick an egg'), ('⬇️', 'Nod down to smash')],
                                       color: KidColors.orange,
                                       colorDark: KidColors.orangeDark,
                                       bannerColors: const [Color(0xFFFFE082), Color(0xFFFFB74D)],
@@ -370,7 +375,7 @@ class _ArcadeHubScreenState extends State<ArcadeHubScreen> {
     RabbitMood mood = RabbitMood.normal;
     String? caption = 'Hi friend!';
     String headline = "LET'S PLAY!";
-    String? footnote = isHandMode ? 'Show me your hand ✋' : 'Look at the camera 👀';
+    String? footnote = ctrl.noCamera ? 'Tap PLAY to start 👆' : (isHandMode ? 'Show me your hand ✋' : 'Look at the camera 👀');
     if (detected && acting) {
       mood = RabbitMood.happy;
       caption = null;
@@ -422,13 +427,18 @@ class _ArcadeHubScreenState extends State<ArcadeHubScreen> {
   // ===========================================================================
   Widget _buildCameraStatus(FaceMotionController ctrl, MotionState state, bool isHandMode, double s) {
     final detected = isHandMode ? state.handDetected : state.faceDetected;
-    final Color color = detected ? KidColors.green : (ctrl.cameraAvailable ? KidColors.blue : KidColors.orange);
-    final String text = isHandMode
-        ? (detected ? 'Hand found!' : 'Raise your hand to the camera')
-        : (detected ? 'Face found!' : (ctrl.cameraAvailable ? 'Camera ready' : 'Touch mode'));
-    final IconData icon = isHandMode
-        ? (detected ? Icons.pan_tool_rounded : Icons.front_hand_outlined)
-        : (detected ? Icons.face_rounded : (ctrl.cameraAvailable ? Icons.videocam_rounded : Icons.touch_app_rounded));
+    final noCamera = ctrl.noCamera;
+    final Color color = detected ? KidColors.green : (noCamera ? KidColors.orange : KidColors.blue);
+    final String text = noCamera
+        ? 'Touch mode'
+        : isHandMode
+            ? (detected ? 'Hand found!' : 'Raise your hand to the camera')
+            : (detected ? 'Face found!' : (ctrl.cameraAvailable ? 'Camera ready' : 'Starting camera...'));
+    final IconData icon = noCamera
+        ? Icons.touch_app_rounded
+        : isHandMode
+            ? (detected ? Icons.pan_tool_rounded : Icons.front_hand_outlined)
+            : (detected ? Icons.face_rounded : Icons.videocam_rounded);
 
     return KidPanel(
       borderColor: color,

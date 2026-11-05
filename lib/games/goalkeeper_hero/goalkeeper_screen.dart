@@ -1,4 +1,5 @@
 import 'dart:ui' as ui;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import '../../motion/face_motion_controller.dart';
@@ -12,6 +13,7 @@ import '../../ui/widgets/listenable_selector.dart';
 import '../../ui/widgets/rabbit_mascot.dart';
 import '../../ui/widgets/ready_gate.dart';
 import '../../ui/widgets/score_fly_layer.dart';
+import '../../ui/widgets/touch_hint.dart';
 import 'goalkeeper_canvas.dart';
 import 'goalkeeper_engine.dart';
 import 'goalkeeper_models.dart';
@@ -97,7 +99,24 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
       if (_oopsTimer <= 0) setState(() {});
     }
 
-    _engine.update(clampedDt, widget.motionController.state, cameraAvailable: widget.motionController.cameraAvailable);
+    _engine.update(clampedDt, widget.motionController.state, touchMode: widget.motionController.touchMode);
+  }
+
+  // ---------------------------------------------------------------------------
+  // CHƠI CHẠM / CHUỘT: chạm, kéo hoặc rê chuột tới đâu thì đôi găng tới đó
+  // ---------------------------------------------------------------------------
+  bool _touchUsed = false; // đã chạm lần đầu -> ẩn gợi ý
+
+  bool get _acceptsTouch =>
+      widget.motionController.touchMode &&
+      !_engine.isPaused &&
+      (_engine.phase == KeeperPhase.countdown || _engine.phase == KeeperPhase.playing);
+
+  void _onPointer(PointerEvent e) {
+    if (!_acceptsTouch) return;
+    // Chuột rê ngang qua (chưa bấm) cũng điều khiển được, nhưng không tính là "đã chạm" để ẩn gợi ý
+    if (e is! PointerHoverEvent && !_touchUsed) setState(() => _touchUsed = true);
+    _engine.touchMoveTo(e.localPosition);
   }
 
   void _startGame() {
@@ -106,6 +125,7 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
       _shownScore = 0;
       _latestWord = null;
       _oopsTimer = 0.0;
+      _touchUsed = false;
       _engine.startGame();
     });
   }
@@ -173,159 +193,184 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
 
     return Scaffold(
       backgroundColor: const Color(0xFF6EC6FF),
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          // 1. GAME CANVAS 60 FPS (VẼ SÂN VẬN ĐỘNG & BÓNG BAY TOÀN MÀN HÌNH)
-          Positioned.fill(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                // Engine tính va chạm theo pixel nên cần biết kích thước vùng vẽ
-                _engine.layout = KeeperLayout(constraints.biggest);
-                // RepaintBoundary: canvas vẽ lại mỗi khung, HUD phía trên không phải vẽ lại theo
-                return RepaintBoundary(
-                  child: AnimatedBuilder(
-                    animation: _engine,
-                    builder: (context, _) => GoalkeeperCanvas(
-                      engine: _engine,
-                      ballImage: _ballImage,
+      // Listener bọc cả màn: chạm / kéo / rê chuột ở đâu (kể cả trên thỏ, banner) găng cũng tới đó.
+      // Listener không giành sự kiện nên các nút HUD vẫn bấm bình thường.
+      body: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: _onPointer,
+        onPointerMove: _onPointer,
+        onPointerHover: _onPointer,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // 1. GAME CANVAS 60 FPS (VẼ SÂN VẬN ĐỘNG & BÓNG BAY TOÀN MÀN HÌNH)
+            Positioned.fill(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // Engine tính va chạm theo pixel nên cần biết kích thước vùng vẽ
+                  _engine.layout = KeeperLayout(constraints.biggest);
+                  // RepaintBoundary: canvas vẽ lại mỗi khung, HUD phía trên không phải vẽ lại theo
+                  return RepaintBoundary(
+                    child: AnimatedBuilder(
+                      animation: _engine,
+                      builder: (context, _) => GoalkeeperCanvas(
+                        engine: _engine,
+                        ballImage: _ballImage,
+                      ),
                     ),
+                  );
+                },
+              ),
+            ),
+
+            // Lớp phủ sao bay về ô tổng sao
+            Positioned.fill(
+              child: ScoreFlyLayer(
+                key: _flyLayerKey,
+                targetKey: _scoreKey,
+                onArrive: () {
+                  if (mounted) setState(() => _shownScore = _engine.score);
+                },
+              ),
+            ),
+
+            // 2. MASCOT THỎ CỔ VŨ Ở GÓC DƯỚI TRÁI
+            Positioned(
+              left: pad.left + 12 * s,
+              bottom: pad.bottom + 8 * s,
+              child: ListenableSelector(
+                listenable: _engine,
+                selector: () => (_engine.phase, _engine.streak, _engine.lives),
+                builder: (context, _) => _buildMascot(s),
+              ),
+            ),
+
+            // 3. BANNER TỪ VỰNG TIẾNG ANH VỪA BẮT ĐƯỢC (TOP CENTER)
+            if (_latestWord != null)
+              Positioned(
+                top: pad.top + 60 * s,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: _buildWordCelebrationBanner(s),
+                ),
+              ),
+
+            // 4. CHỜ GIƠ 2 TAY / ĐẾM NGƯỢC 3-2-1 / LỜI NHẮC KHI MẤT TAY
+            Positioned.fill(
+              child: IgnorePointer(
+                child: ListenableSelector(
+                  listenable: _engine,
+                  selector: () => (
+                    _engine.phase,
+                    _engine.readyProgress,
+                    _engine.countdownNumber,
+                    _engine.countdownFraction,
+                    _engine.goFlash,
+                    _engine.leftGlove.detected,
+                    _engine.rightGlove.detected,
+                    widget.motionController.state.handsCount == 0,
+                    widget.motionController.touchMode,
                   ),
+                  builder: (context, _) => _buildPhaseOverlay(s, pad),
+                ),
+              ),
+            ),
+
+            // 4b. GỢI Ý CHƠI CHẠM (ẩn sau lần chạm đầu): dưới chân khung thành
+            if (!_touchUsed)
+              ListenableSelector(
+                listenable: Listenable.merge([widget.motionController, _engine]),
+                selector: () => widget.motionController.touchMode && _engine.phase == KeeperPhase.playing,
+                builder: (context, _) {
+                  if (!widget.motionController.touchMode || _engine.phase != KeeperPhase.playing) {
+                    return const SizedBox.shrink();
+                  }
+                  return Align(
+                    alignment: const Alignment(0, 0.86),
+                    child: TouchHint(text: 'Move the gloves to the ball!', scale: s),
+                  );
+                },
+              ),
+
+            // 5. HUD HEADER (LOGO, BACK, TIM MẠNG, SỐ SAO, CÀI ĐẶT)
+            Positioned(
+              top: pad.top + _hudMargin * s,
+              left: pad.left + _hudMargin * s,
+              right: pad.right + _hudMargin * s,
+              child: _buildTopHud(s),
+            ),
+
+            // 6. CAMERA PIP OVERLAY
+            CameraPipOverlay(
+              motionController: widget.motionController,
+              onCalibrate: _openCalibration,
+              top: pad.top + _hudMargin * s + (_hudButtonSize * 1.09) * s + 8,
+              right: pad.right + _hudMargin * s,
+            ),
+
+            // 7. CHỌN MỨC ĐỘ & CHỦ ĐỀ TRƯỚC KHI CHƠI
+            ListenableSelector(
+              listenable: _engine,
+              selector: () => (_engine.phase, _engine.difficulty, _engine.topic),
+              builder: (context, _) {
+                if (_engine.phase != KeeperPhase.setup) return const SizedBox.shrink();
+                return _buildSetupDialog(s);
+              },
+            ),
+
+            // 8. TẠM DỪNG (PAUSED DIALOG)
+            ListenableSelector(
+              listenable: _engine,
+              selector: () => _engine.isPaused,
+              builder: (context, _) {
+                if (!_engine.isPaused) return const SizedBox.shrink();
+                return KidDialog(
+                  mascot: RabbitMascot.images[RabbitMood.normal],
+                  accent: KidColors.blue,
+                  children: [
+                    _dialogTitle('PAUSED', KidColors.blueDark, s),
+                    SizedBox(height: 6 * s),
+                    Text(
+                      'Take a little rest, Keeper! 🧤',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: KidColors.textSoft, fontSize: 15 * s, fontWeight: FontWeight.w700),
+                    ),
+                    SizedBox(height: 18 * s),
+                    _buildActionRow(
+                      s: s,
+                      primaryIcon: Icons.play_arrow_rounded,
+                      primaryLabel: 'PLAY',
+                      onPrimary: () {
+                        SoundService.instance.playClick();
+                        _engine.resume();
+                      },
+                      showHome: true,
+                    ),
+                  ],
                 );
               },
             ),
-          ),
 
-          // Lớp phủ sao bay về ô tổng sao
-          Positioned.fill(
-            child: ScoreFlyLayer(
-              key: _flyLayerKey,
-              targetKey: _scoreKey,
-              onArrive: () {
-                if (mounted) setState(() => _shownScore = _engine.score);
+            // 9. KẾT THÚC (GAME OVER DIALOG)
+            ListenableSelector(
+              listenable: _engine,
+              selector: () => (
+                _engine.isGameOver,
+                _engine.score,
+                _engine.highScore,
+                _engine.isNewHighScore,
+                _engine.ballsSaved,
+                _engine.ballsCaught,
+                _engine.savedWords.length,
+              ),
+              builder: (context, _) {
+                if (!_engine.isGameOver) return const SizedBox.shrink();
+                return _buildGameOverDialog(s);
               },
             ),
-          ),
-
-          // 2. MASCOT THỎ CỔ VŨ Ở GÓC DƯỚI TRÁI
-          Positioned(
-            left: pad.left + 12 * s,
-            bottom: pad.bottom + 8 * s,
-            child: ListenableSelector(
-              listenable: _engine,
-              selector: () => (_engine.phase, _engine.streak, _engine.lives),
-              builder: (context, _) => _buildMascot(s),
-            ),
-          ),
-
-          // 3. BANNER TỪ VỰNG TIẾNG ANH VỪA BẮT ĐƯỢC (TOP CENTER)
-          if (_latestWord != null)
-            Positioned(
-              top: pad.top + 60 * s,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: _buildWordCelebrationBanner(s),
-              ),
-            ),
-
-          // 4. CHỜ GIƠ 2 TAY / ĐẾM NGƯỢC 3-2-1 / LỜI NHẮC KHI MẤT TAY
-          Positioned.fill(
-            child: IgnorePointer(
-              child: ListenableSelector(
-                listenable: _engine,
-                selector: () => (
-                  _engine.phase,
-                  _engine.readyProgress,
-                  _engine.countdownNumber,
-                  _engine.countdownFraction,
-                  _engine.goFlash,
-                  _engine.leftGlove.detected,
-                  _engine.rightGlove.detected,
-                  widget.motionController.state.handsCount == 0,
-                ),
-                builder: (context, _) => _buildPhaseOverlay(s, pad),
-              ),
-            ),
-          ),
-
-          // 5. HUD HEADER (LOGO, BACK, TIM MẠNG, SỐ SAO, CÀI ĐẶT)
-          Positioned(
-            top: pad.top + _hudMargin * s,
-            left: pad.left + _hudMargin * s,
-            right: pad.right + _hudMargin * s,
-            child: _buildTopHud(s),
-          ),
-
-          // 6. CAMERA PIP OVERLAY
-          CameraPipOverlay(
-            motionController: widget.motionController,
-            onCalibrate: _openCalibration,
-            top: pad.top + _hudMargin * s + (_hudButtonSize * 1.09) * s + 8,
-            right: pad.right + _hudMargin * s,
-          ),
-
-          // 7. CHỌN MỨC ĐỘ & CHỦ ĐỀ TRƯỚC KHI CHƠI
-          ListenableSelector(
-            listenable: _engine,
-            selector: () => (_engine.phase, _engine.difficulty, _engine.topic),
-            builder: (context, _) {
-              if (_engine.phase != KeeperPhase.setup) return const SizedBox.shrink();
-              return _buildSetupDialog(s);
-            },
-          ),
-
-          // 8. TẠM DỪNG (PAUSED DIALOG)
-          ListenableSelector(
-            listenable: _engine,
-            selector: () => _engine.isPaused,
-            builder: (context, _) {
-              if (!_engine.isPaused) return const SizedBox.shrink();
-              return KidDialog(
-                mascot: RabbitMascot.images[RabbitMood.normal],
-                accent: KidColors.blue,
-                children: [
-                  _dialogTitle('PAUSED', KidColors.blueDark, s),
-                  SizedBox(height: 6 * s),
-                  Text(
-                    'Take a little rest, Keeper! 🧤',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: KidColors.textSoft, fontSize: 15 * s, fontWeight: FontWeight.w700),
-                  ),
-                  SizedBox(height: 18 * s),
-                  _buildActionRow(
-                    s: s,
-                    primaryIcon: Icons.play_arrow_rounded,
-                    primaryLabel: 'PLAY',
-                    onPrimary: () {
-                      SoundService.instance.playClick();
-                      _engine.resume();
-                    },
-                    showHome: true,
-                  ),
-                ],
-              );
-            },
-          ),
-
-          // 9. KẾT THÚC (GAME OVER DIALOG)
-          ListenableSelector(
-            listenable: _engine,
-            selector: () => (
-              _engine.isGameOver,
-              _engine.score,
-              _engine.highScore,
-              _engine.isNewHighScore,
-              _engine.ballsSaved,
-              _engine.ballsCaught,
-              _engine.savedWords.length,
-            ),
-            builder: (context, _) {
-              if (!_engine.isGameOver) return const SizedBox.shrink();
-              return _buildGameOverDialog(s);
-            },
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -498,7 +543,7 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
             ),
           );
         }
-        if (widget.motionController.state.handsCount == 0) {
+        if (widget.motionController.state.handsCount == 0 && !widget.motionController.touchMode) {
           return Align(
             alignment: Alignment.topCenter,
             child: Padding(
@@ -915,10 +960,11 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
   }
 
   Widget _buildMascot(double s) {
+    final bool touch = widget.motionController.touchMode;
     RabbitMood mood = RabbitMood.normal;
     String headline = 'READY! 🧤';
     String? caption = 'Guard the goal';
-    String? footnote = 'Use both hands';
+    String? footnote = touch ? 'Move the gloves' : 'Use both hands';
 
     if (_engine.phase == KeeperPhase.waitingHands) {
       headline = 'HANDS UP! 👐';
@@ -941,7 +987,7 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
     } else if (_engine.lives == 1 && _engine.phase == KeeperPhase.playing) {
       headline = 'LAST CHANCE!';
       caption = 'Focus on the ball';
-      footnote = 'Block with both hands';
+      footnote = touch ? 'Gloves to the ball!' : 'Block with both hands';
     }
 
     return RabbitMascot(

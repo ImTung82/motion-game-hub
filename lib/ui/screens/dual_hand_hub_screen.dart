@@ -84,7 +84,11 @@ class _DualHandHubScreenState extends State<DualHandHubScreen> {
               // Chỉ build lại khi thứ đang hiển thị đổi (controller báo theo từng khung camera, ~30 lần/giây)
               child: ListenableSelector(
                 listenable: widget.motionController,
-                selector: () => (widget.motionController.state.handsCount, widget.motionController.state.isClapTriggered),
+                selector: () => (
+                  widget.motionController.state.handsCount,
+                  widget.motionController.state.isClapTriggered,
+                  widget.motionController.noCamera,
+                ),
                 builder: (context, _) {
                   final ctrl = widget.motionController;
                   final state = ctrl.state;
@@ -138,10 +142,12 @@ class _DualHandHubScreenState extends State<DualHandHubScreen> {
                                       badge: '🔥 POPULAR',
                                       badgeColor: KidColors.orange,
                                       description: 'Use both hands to block incoming shots! Save the goal and learn English words.',
-                                      steps: const [
-                                        ('👐', 'Move both hands to guard the net'),
-                                        ('✊', 'Close hands together to catch the ball!'),
-                                      ],
+                                      steps: ctrl.noCamera
+                                          ? const [('👆', 'Drag the gloves to the ball')]
+                                          : const [
+                                              ('👐', 'Move both hands to guard the net'),
+                                              ('✊', 'Close hands together to catch the ball!'),
+                                            ],
                                       color: KidColors.blue,
                                       colorDark: KidColors.blueDark,
                                       bannerColors: const [Color(0xFF80D8FF), Color(0xFF00B0FF)],
@@ -235,7 +241,11 @@ class _DualHandHubScreenState extends State<DualHandHubScreen> {
     String headline = 'SHOW BOTH HANDS!';
     String? footnote = 'Raise both hands up 👐';
 
-    if (state.isClapTriggered) {
+    if (ctrl.noCamera) {
+      caption = 'Hi friend!';
+      headline = "LET'S PLAY!";
+      footnote = 'Tap PLAY to start 👆';
+    } else if (state.isClapTriggered) {
       mood = RabbitMood.happy;
       caption = 'GREAT CLAP! 🎉';
       headline = 'NICE JOB!';
@@ -283,10 +293,14 @@ class _DualHandHubScreenState extends State<DualHandHubScreen> {
   Widget _buildHandsStatus(FaceMotionController ctrl, MotionState state, double s) {
     final int count = state.handsCount;
     final bool fullTwoHands = count >= 2;
-    final Color color = fullTwoHands ? KidColors.green : (count == 1 ? KidColors.orange : KidColors.pink);
+    final Color color = ctrl.noCamera
+        ? KidColors.orange
+        : (fullTwoHands ? KidColors.green : (count == 1 ? KidColors.orange : KidColors.pink));
 
     String statusText;
-    if (fullTwoHands) {
+    if (ctrl.noCamera) {
+      statusText = 'Touch mode 👆';
+    } else if (fullTwoHands) {
       statusText = 'Both Hands Ready! (2/2) 👐';
     } else if (count == 1) {
       statusText = '1 Hand Detected (Need 2) ✋';
