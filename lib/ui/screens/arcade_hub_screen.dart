@@ -7,6 +7,7 @@ import '../../motion/face_motion_controller.dart';
 import '../../motion/motion_state.dart';
 import '../widgets/calibration_dialog.dart';
 import '../widgets/company_logo_badge.dart';
+import '../widgets/fullscreen_button.dart';
 import '../widgets/kid_ui.dart';
 import '../widgets/listenable_selector.dart';
 import '../widgets/rabbit_mascot.dart';
@@ -468,19 +469,25 @@ class _ArcadeHubScreenState extends State<ArcadeHubScreen> {
     return Row(
       children: [
         Flexible(
-          child: SizedBox(
-            width: 190 * s,
-            child: KidButton(
-              icon: Icons.tune_rounded,
-              label: 'CAMERA SETUP',
-              color: KidColors.blue,
-              shadowColor: KidColors.blueDark,
-              height: 44 * s,
-              onPressed: () {
-                SoundService.instance.playClick();
-                _openCalibration();
-              },
-            ),
+          // Hẹp (VD: iframe 800x600 kiểu PhET, có thêm nút toàn màn hình) => chỉ hiện icon, khỏi co chữ tí hon
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 150 * s;
+              return SizedBox(
+                width: 190 * s,
+                child: KidButton(
+                  icon: Icons.tune_rounded,
+                  label: compact ? null : 'CAMERA SETUP',
+                  color: KidColors.blue,
+                  shadowColor: KidColors.blueDark,
+                  height: 44 * s,
+                  onPressed: () {
+                    SoundService.instance.playClick();
+                    _openCalibration();
+                  },
+                ),
+              );
+            },
           ),
         ),
         SizedBox(width: 10 * s),
@@ -499,6 +506,7 @@ class _ArcadeHubScreenState extends State<ArcadeHubScreen> {
             }
           },
         ),
+        FullscreenButton(size: 44 * s, leadingGap: 10 * s),
       ],
     );
   }

@@ -102,6 +102,27 @@ firebase deploy --only hosting   # -> https://motion-game-hub-web.web.app
 
 Trong iframe, website mẹ thường không gửi COEP nên Flutter vẽ đơn luồng (vẫn chạy, chậm hơn một chút trên máy yếu).
 
+**Iframe chuẩn PhET** (LMS, Moodle, Canvas, Google Sites... nơi nào nhúng được mô phỏng PhET): lấy mã ở
+https://motion-game-hub-web.web.app/embed (`web/embed.html`: chọn game, khung 800×600 / 960×540 / co giãn, bật tắt camera).
+Mỗi game có link riêng như từng mô phỏng PhET:
+
+| Game | Link |
+| --- | --- |
+| Cả bộ (hub) | `https://motion-game-hub-web.web.app/` |
+| Fruits Kick | `https://motion-game-hub-web.web.app/?game=fruits-kick` |
+| Egg Smasher | `https://motion-game-hub-web.web.app/?game=egg-smasher` |
+| Goalkeeper Hero | `https://motion-game-hub-web.web.app/?game=goalkeeper-hero` |
+
+```html
+<iframe src="https://motion-game-hub-web.web.app/?game=fruits-kick" width="800" height="600" scrolling="no"
+        title="Fruits Kick - Enspire Arcade" allow="camera; fullscreen; autoplay; gamepad" allowfullscreen></iframe>
+```
+
+- Link có `?game=`: hết splash hiện nút PLAY (cú chạm đầu tiên mở khoá âm thanh trên trình duyệt) rồi vào thẳng game;
+  nút Back trong game vẫn về hub như thường (`lib/core/launch_game.dart`).
+- Iframe PhET gốc không có `allow="camera"` => game tự chuyển chơi chạm / chuột và hiện nút "Mở tab mới" để chơi bằng camera.
+- Có `allowfullscreen` thì hub hiện nút toàn màn hình (`lib/ui/widgets/fullscreen_button.dart`).
+
 Lần đầu mở app cần **cấp quyền camera**. Nên chơi ở nơi đủ sáng, đặt máy ngang và đứng cách camera khoảng 0,5-1 m (chế độ 2 tay: 1-1,5 m).
 
 Tạo lại icon ứng dụng từ logo:
