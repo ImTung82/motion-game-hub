@@ -31,7 +31,8 @@ class _PenaltyScreenState extends State<PenaltyScreen> with SingleTickerProvider
   final ReadyGate _readyGate = ReadyGate(playGoWhistle: false); // announceTarget đã thổi còi
   late final Ticker _ticker;
   Duration _lastTick = Duration.zero;
-  double _animationValue = 0.0;
+  // Thời gian hoạt ảnh (giây) cho canvas: ValueNotifier để painter đọc giá trị mới mỗi khung
+  final ValueNotifier<double> _time = ValueNotifier(0.0);
 
   // Điểm bay: điểm trên HUD chỉ tăng khi "+N" bay tới nơi
   final GlobalKey<ScoreFlyLayerState> _flyLayerKey = GlobalKey<ScoreFlyLayerState>();
@@ -76,7 +77,7 @@ class _PenaltyScreenState extends State<PenaltyScreen> with SingleTickerProvider
     _lastTick = elapsed;
 
     final clampedDt = dt.clamp(0.001, 0.05);
-    _animationValue += clampedDt;
+    _time.value += clampedDt;
 
     final ctrl = widget.motionController;
     if (!_engine.isPaused) _readyGate.update(clampedDt, ctrl.state, cameraAvailable: ctrl.cameraAvailable, calibrating: ctrl.isCalibrating);
@@ -103,6 +104,7 @@ class _PenaltyScreenState extends State<PenaltyScreen> with SingleTickerProvider
     if (_ballListener != null) _ballStream?.removeListener(_ballListener!);
     widget.motionController.setCameraPipQuietly(_prevShowCameraPip, persist: true);
     _ticker.dispose();
+    _time.dispose();
     _readyGate.dispose();
     _engine.dispose();
     super.dispose();
@@ -149,7 +151,7 @@ class _PenaltyScreenState extends State<PenaltyScreen> with SingleTickerProvider
             child: CustomPaint(
               painter: PenaltyCanvasPainter(
                 engine: _engine,
-                animationValue: _animationValue,
+                time: _time,
                 ballImage: _ballImage,
               ),
             ),

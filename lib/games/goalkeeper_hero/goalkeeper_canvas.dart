@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import '../../ui/widgets/ambient_decor.dart';
 import '../../ui/widgets/text_painter_cache.dart';
 import 'goalkeeper_engine.dart';
 import 'goalkeeper_models.dart';
@@ -98,6 +99,21 @@ class _GoalkeeperPainter extends CustomPainter {
 
     // Khán đài xa xa (Dãy màu tím nhạt và đèn sân vận động)
     final standH = 45 * u;
+    final roofTop = horizonY - standH - 12.0 * u;
+
+    // Cảnh trời chuyển động (sau khán đài & khung thành): mây trôi, chim bay
+    final t = engine.effectTime;
+    final sky = Rect.fromLTWH(0, 0, w, roofTop);
+    AmbientDecor.drawClouds(
+      canvas,
+      sky,
+      t,
+      const [(0.1, 0.35, 1.0, 0.016), (0.5, 0.2, 0.8, 0.011), (0.8, 0.55, 0.65, 0.02)],
+      size: 18 * u,
+    );
+    AmbientDecor.drawBirdFlock(canvas, Rect.fromLTWH(0, roofTop * 0.15, w, roofTop * 0.5), t, size: 8 * u, period: 21);
+    AmbientDecor.drawBirdFlock(canvas, Rect.fromLTWH(0, roofTop * 0.1, w, roofTop * 0.45), t,
+        size: 6.5 * u, period: 28, phase: 0.5, count: 2, leftToRight: false);
     final standRect = Rect.fromLTRB(-m, horizonY - standH, w + m, horizonY);
     final standPaint = Paint()
       ..shader = const LinearGradient(
@@ -117,6 +133,10 @@ class _GoalkeeperPainter extends CustomPainter {
         Paint()..color = i.isEven ? const Color(0xFFFF6B6B) : Colors.white,
       );
     }
+
+    // Dây cờ đuôi nheo phấp phới trên mép mái khán đài
+    AmbientDecor.drawBunting(canvas, Offset(-m, roofTop), Offset(w * 0.5, roofTop), t, flagSize: 9 * u, sag: 0.04);
+    AmbientDecor.drawBunting(canvas, Offset(w * 0.5, roofTop), Offset(w + m, roofTop), t + 1.3, flagSize: 9 * u, sag: 0.04);
 
     // Đèn chiếu sáng sân vận động (Floodlights) 2 bên
     _drawStadiumLight(canvas, u, 60 * u, horizonY - standH - 5 * u);

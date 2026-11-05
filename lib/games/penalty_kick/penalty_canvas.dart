@@ -1,23 +1,30 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../ui/widgets/ambient_decor.dart';
 import '../../ui/widgets/text_painter_cache.dart';
 import 'penalty_engine.dart';
 
 class PenaltyCanvasPainter extends CustomPainter {
   final PenaltyEngine engine;
-  final double animationValue;
+  /// Thời gian hoạt ảnh (giây), màn chơi tăng mỗi khung. Đọc lúc vẽ (không chụp lúc build) để mây, mặt trời,
+  /// khán giả... chuyển động liên tục, kể cả lúc chờ bé vào vị trí / đếm ngược (engine chưa chạy).
+  final ValueListenable<double> time;
   final ui.Image? ballImage; // ảnh quả bóng (assets/images/soccer_ball.png); null -> vẽ bóng vector
 
   PenaltyCanvasPainter({
     required this.engine,
-    required this.animationValue,
+    required this.time,
     this.ballImage,
-  }) : super(repaint: engine);
+  }) : super(repaint: Listenable.merge([engine, time]));
+
+  double get animationValue => time.value;
 
   @override
   void paint(Canvas canvas, Size size) {
     _drawStadiumBackground(canvas, size);
+    _drawFestiveBunting(canvas, size);
     _drawGrassPitch(canvas, size);
     _drawGoalNet(canvas, size);
     _drawGoalPosts(canvas, size);
@@ -63,11 +70,27 @@ class PenaltyCanvasPainter extends CustomPainter {
     _drawSmilingSun(canvas, Offset(w * 0.17, h * 0.11), h * 0.065);
 
     // Mây trắng bồng bềnh trôi chậm sang phải: (x ban đầu, y, tỉ lệ, tốc độ)
-    const clouds = [(0.05, 0.07, 1.0, 0.012), (0.42, 0.04, 0.8, 0.008), (0.7, 0.12, 0.65, 0.015)];
+    const clouds = [(0.05, 0.07, 1.0, 0.02), (0.42, 0.04, 0.8, 0.014), (0.7, 0.12, 0.65, 0.026)];
     for (final (x0, y, scale, speed) in clouds) {
       final x = ((x0 + animationValue * speed) % 1.3) - 0.15;
       _drawCloud(canvas, Offset(x * w, y * h + h * 0.04), h * 0.045 * scale);
     }
+
+    // Đàn chim bay ngang trời (2 đàn lệch nhịp, ngược chiều nhau)
+    final birdSky = Rect.fromLTWH(0, h * 0.02, w, h * 0.11);
+    AmbientDecor.drawBirdFlock(canvas, birdSky, animationValue, size: h * 0.016, period: 22);
+    AmbientDecor.drawBirdFlock(canvas, birdSky, animationValue,
+        size: h * 0.013, period: 29, phase: 0.55, count: 2, leftToRight: false);
+
+    // Bóng bay khán giả thả lên trời: bay lên từ sau khán đài (vẽ trước khán đài nên như bay ra từ đó)
+    final balloonSky = Rect.fromLTWH(0, -h * 0.02, w, h * 0.26);
+    final balloonSize = h * 0.026;
+    AmbientDecor.drawBalloon(canvas, balloonSky, animationValue,
+        size: balloonSize, color: const Color(0xFFFF6B6B), x: 0.32, period: 13);
+    AmbientDecor.drawBalloon(canvas, balloonSky, animationValue,
+        size: balloonSize, color: const Color(0xFFFFD43B), x: 0.6, period: 17, phase: 0.4);
+    AmbientDecor.drawBalloon(canvas, balloonSky, animationValue,
+        size: balloonSize, color: const Color(0xFF4DABF7), x: 0.9, period: 15, phase: 0.75);
 
     // Khán đài
     final standTop = h * 0.19, standBottom = h * 0.355;
@@ -173,6 +196,15 @@ class PenaltyCanvasPainter extends CustomPainter {
     picture.dispose();
     cached?.image.dispose();
     return _fanAtlas = _FanAtlas(image, r, dpr, cellW, cellH, anchorX, anchorY);
+  }
+
+  /// Dây cờ đuôi nheo phấp phới trên mép mái khán đài (2 đoạn võng xuống)
+  void _drawFestiveBunting(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    final y = h * 0.165; // mép trên mái sọc (khán đài bắt đầu ở 0.19h, mái cao 0.025h)
+    final flag = h * 0.021;
+    AmbientDecor.drawBunting(canvas, Offset(0, y), Offset(w * 0.5, y), animationValue, flagSize: flag, sag: 0.04);
+    AmbientDecor.drawBunting(canvas, Offset(w * 0.5, y), Offset(w, y), animationValue + 1.3, flagSize: flag, sag: 0.04);
   }
 
   void _drawSmilingSun(Canvas canvas, Offset c, double r) {
