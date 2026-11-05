@@ -13,10 +13,11 @@ enum GloveType {
   right,
 }
 
-/// Các giai đoạn của 1 ván: chọn mức độ -> chờ giơ 2 tay -> đếm ngược 3-2-1 -> chơi -> kết thúc
+/// Các giai đoạn của 1 ván: chọn mức độ -> chờ giơ 2 tay -> "GREAT! Get ready" -> đếm ngược 3-2-1 -> chơi -> kết thúc
 enum KeeperPhase {
   setup,
   waitingHands,
+  handsReady,
   countdown,
   playing,
   gameOver,

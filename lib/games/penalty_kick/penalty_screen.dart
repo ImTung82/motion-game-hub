@@ -79,7 +79,7 @@ class _PenaltyScreenState extends State<PenaltyScreen> with SingleTickerProvider
     _animationValue += clampedDt;
 
     final ctrl = widget.motionController;
-    if (!_engine.isPaused) _readyGate.update(clampedDt, ctrl.state, cameraAvailable: ctrl.cameraAvailable);
+    if (!_engine.isPaused) _readyGate.update(clampedDt, ctrl.state, cameraAvailable: ctrl.cameraAvailable, calibrating: ctrl.isCalibrating);
     if (!_readyGate.isDone) return; // chưa thấy mặt / tay hoặc đang đếm ngược: game đứng yên
 
     _engine.update(clampedDt, ctrl.state);
