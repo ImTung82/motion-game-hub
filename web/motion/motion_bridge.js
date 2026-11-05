@@ -104,7 +104,8 @@ const debugLog = []; // 20 tin nhắn gần nhất từ worker (dò lỗi)
 
 function ensureWorker() {
   if (worker) return worker;
-  worker = new Worker(new URL('motion_worker.js', import.meta.url));
+  // Giữ ?v=... của bridge cho worker: đổi bản là tải worker mới, không lấy bản cũ trong bộ nhớ đệm
+  worker = new Worker(new URL(`motion_worker.js${new URL(import.meta.url).search}`, import.meta.url));
   worker.onmessage = onWorkerMessage;
   worker.onerror = (e) => {
     console.error('[motion] worker error', e.message);

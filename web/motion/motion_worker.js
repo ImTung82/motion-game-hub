@@ -1,7 +1,7 @@
 // Web Worker chạy MediaPipe Tasks Vision trên luồng riêng để không tranh luồng chính với Flutter
 // (chạy chung luồng: mỗi lần nhận diện ~20ms x 25 lần/giây => game chỉ còn ~36 FPS).
 // motion_bridge.js gửi từng khung hình (ImageBitmap) sang, worker trả kết quả dạng Float32Array.
-importScripts('mediapipe/vision_bundle_iife.js'); // định nghĩa self.Vision
+importScripts(`mediapipe/vision_bundle_iife.js${self.location.search}`); // định nghĩa self.Vision (?v= theo bản deploy)
 const { FilesetResolver, HandLandmarker, FaceLandmarker } = self.Vision;
 
 const base = new URL('.', self.location.href);

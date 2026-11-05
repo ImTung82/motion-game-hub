@@ -24,5 +24,8 @@ Chạy trên Android (ML Kit + MediaPipe native) và Web (MediaPipe JS trong `we
     (chỉ build lại khi giá trị đổi), không dùng `ListenableBuilder`.
   - Canvas game bọc `RepaintBoundary`; chữ / emoji trong `CustomPainter` lấy qua `TextPainterCache`.
   - Tránh hàng trăm lệnh vẽ nhỏ mỗi khung (VD: dùng `drawAtlas` như khán đài Fruits Kick).
+  - `web/index.html` nạp `motion/motion_bridge.js?v=__MOTION_VERSION__`; `firebase deploy` tự chạy
+    `tool/stamp_web_version.mjs` (predeploy) thay bằng mã băm => điện thoại không giữ JS cũ lệch với bản Dart mới.
+    Bridge chuyền `?v=` sang worker / MediaPipe; file JS mới trong `web/motion/` cũng nạp theo kiểu đó.
   - `web/index.html` giới hạn vẽ ~72 FPS trên màn 120/144Hz để GPU còn sức cho MediaPipe.
 - Layout phải ổn cả màn điện thoại lẫn màn rộng (1920px, TV): đừng chặn cứng kích thước theo px.
