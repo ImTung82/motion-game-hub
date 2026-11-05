@@ -219,6 +219,71 @@ function setupVideo(el) {
   return el;
 }
 
+const isEmbedded = (() => {
+  try {
+    return window.self !== window.top;
+  } catch (_) {
+    return true;
+  }
+})();
+let embedHintShown = false;
+
+/**
+ * Đang nằm trong iframe của website khác mà không dùng được camera (trang mẹ thiếu allow="camera",
+ * hoặc người dùng chặn quyền) => báo rõ và cho mở game ở tab riêng. Game vẫn chạy chế độ chạm bên dưới.
+ */
+function showEmbedCameraHint() {
+  if (!isEmbedded || embedHintShown || !document.body) return;
+  embedHintShown = true;
+  const policyBlocked = (() => {
+    try {
+      const policy = document.permissionsPolicy || document.featurePolicy;
+      return policy ? !policy.allowsFeature('camera') : false;
+    } catch (_) {
+      return false;
+    }
+  })();
+
+  const box = document.createElement('div');
+  box.setAttribute('role', 'alert');
+  Object.assign(box.style, {
+    position: 'fixed', left: '50%', bottom: '4%', transform: 'translateX(-50%)', zIndex: '2147483647',
+    width: 'min(92vw, 560px)', boxSizing: 'border-box', padding: 'clamp(10px, 2.2vmin, 18px)',
+    borderRadius: '14px', background: 'rgba(7, 8, 48, 0.94)', color: '#fff',
+    font: '500 clamp(12px, 2.4vmin, 16px)/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+    boxShadow: '0 8px 28px rgba(0,0,0,0.45)', display: 'flex', flexWrap: 'wrap', alignItems: 'center',
+    gap: '10px', justifyContent: 'center', textAlign: 'center',
+  });
+  const text = document.createElement('div');
+  text.style.flex = '1 1 260px';
+  text.textContent = policyBlocked
+    ? 'Trang này chưa cho phép game dùng camera. Mở game ở tab mới để chơi bằng khuôn mặt / bàn tay.'
+    : 'Chưa có quyền dùng camera. Hãy cho phép camera, hoặc mở game ở tab mới.';
+
+  const open = document.createElement('a');
+  open.href = location.href;
+  open.target = '_blank';
+  open.rel = 'noopener';
+  open.textContent = 'Mở trong tab mới';
+  Object.assign(open.style, {
+    padding: '8px 16px', borderRadius: '999px', background: '#ffb627', color: '#070830',
+    fontWeight: '700', textDecoration: 'none', whiteSpace: 'nowrap',
+  });
+
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.textContent = '✕';
+  close.setAttribute('aria-label', 'Đóng');
+  Object.assign(close.style, {
+    background: 'transparent', border: '0', color: '#fff', font: 'inherit', fontSize: '1.2em',
+    cursor: 'pointer', padding: '4px 8px',
+  });
+  close.addEventListener('click', () => box.remove());
+
+  box.append(text, open, close);
+  document.body.appendChild(box);
+}
+
 async function start(options = {}) {
   if (running) return { width: video.videoWidth, height: video.videoHeight };
   mode = options.mode || mode;
@@ -227,10 +292,15 @@ async function start(options = {}) {
   }
 
   const source = options.deviceId ? { deviceId: { exact: options.deviceId } } : { facingMode: 'user' };
-  stream = await navigator.mediaDevices.getUserMedia({
-    audio: false,
-    video: { ...source, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30, max: 30 } },
-  });
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { ...source, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30, max: 30 } },
+    });
+  } catch (e) {
+    if (e?.name === 'NotAllowedError' || e?.name === 'SecurityError') showEmbedCameraHint();
+    throw e;
+  }
 
   video = setupVideo(document.createElement('video'));
   // Phải nằm trong DOM để trình duyệt (nhất là Safari) giải mã khung hình liên tục
