@@ -244,30 +244,33 @@ function showEmbedCameraHint() {
     }
   })();
 
+  // Thanh mảnh sát mép trên, giữa màn hình: không che nút PLAY ở hub hay vùng chơi
+  // (chỗ đó chỉ có hình trang trí / khoảng trống giữa các nút HUD)
   const box = document.createElement('div');
   box.setAttribute('role', 'alert');
   Object.assign(box.style, {
-    position: 'fixed', left: '50%', bottom: '4%', transform: 'translateX(-50%)', zIndex: '2147483647',
-    width: 'min(92vw, 560px)', boxSizing: 'border-box', padding: 'clamp(10px, 2.2vmin, 18px)',
-    borderRadius: '14px', background: 'rgba(7, 8, 48, 0.94)', color: '#fff',
-    font: '500 clamp(12px, 2.4vmin, 16px)/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
-    boxShadow: '0 8px 28px rgba(0,0,0,0.45)', display: 'flex', flexWrap: 'wrap', alignItems: 'center',
-    gap: '10px', justifyContent: 'center', textAlign: 'center',
+    position: 'fixed', left: '50%', top: 'max(6px, env(safe-area-inset-top))', transform: 'translateX(-50%)',
+    zIndex: '2147483647', maxWidth: 'min(calc(100vw - 16px), 520px)', boxSizing: 'border-box',
+    padding: '5px 6px 5px 14px', borderRadius: '18px', background: 'rgba(7, 8, 48, 0.88)', color: '#fff',
+    font: '600 clamp(11px, 1.8vmin, 14px)/1.3 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+    boxShadow: '0 4px 16px rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', gap: '8px',
   });
-  const text = document.createElement('div');
-  text.style.flex = '1 1 260px';
-  text.textContent = policyBlocked
-    ? 'Trang này chưa cho phép game dùng camera. Mở game ở tab mới để chơi bằng khuôn mặt / bàn tay.'
-    : 'Chưa có quyền dùng camera. Hãy cho phép camera, hoặc mở game ở tab mới.';
+  const text = document.createElement('span');
+  Object.assign(text.style, { flex: '1 1 auto', minWidth: '0' });
+  text.textContent = policyBlocked ? '📷 Trang này chưa cho dùng camera' : '📷 Chưa có quyền dùng camera';
+  // Câu đầy đủ khi rê chuột / trình đọc màn hình
+  box.title = policyBlocked
+    ? 'Trang nhúng chưa cho phép game dùng camera. Mở game ở tab mới để chơi bằng khuôn mặt / bàn tay.'
+    : 'Hãy cho phép camera, hoặc mở game ở tab mới để chơi bằng khuôn mặt / bàn tay.';
 
   const open = document.createElement('a');
   open.href = location.href;
   open.target = '_blank';
   open.rel = 'noopener';
-  open.textContent = 'Mở trong tab mới';
+  open.textContent = 'Mở tab mới';
   Object.assign(open.style, {
-    padding: '8px 16px', borderRadius: '999px', background: '#ffb627', color: '#070830',
-    fontWeight: '700', textDecoration: 'none', whiteSpace: 'nowrap',
+    padding: '5px 12px', borderRadius: '999px', background: '#ffb627', color: '#070830',
+    fontWeight: '800', textDecoration: 'none', whiteSpace: 'nowrap', flex: 'none',
   });
 
   const close = document.createElement('button');
@@ -275,8 +278,8 @@ function showEmbedCameraHint() {
   close.textContent = '✕';
   close.setAttribute('aria-label', 'Đóng');
   Object.assign(close.style, {
-    background: 'transparent', border: '0', color: '#fff', font: 'inherit', fontSize: '1.2em',
-    cursor: 'pointer', padding: '4px 8px',
+    background: 'transparent', border: '0', color: '#fff', font: 'inherit', fontSize: '1.1em',
+    cursor: 'pointer', padding: '2px 6px', flex: 'none',
   });
   close.addEventListener('click', () => box.remove());
 

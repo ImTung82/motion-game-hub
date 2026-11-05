@@ -183,7 +183,7 @@ class _ArcadeHubScreenState extends State<ArcadeHubScreen> {
   // TIÊU ĐỀ: logo + chữ cầu vồng viền trắng
   // ===========================================================================
   Widget _buildTitle(double s) {
-    const title = 'ENSPIRE DIGITAL';
+    const title = 'ENSPIRE ARCADE';
     final fontSize = 30 * s;
     TextSpan spans({required bool outline}) {
       int colorIndex = 0;
