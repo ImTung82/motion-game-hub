@@ -79,6 +79,9 @@ class GoalkeeperEngine extends ChangeNotifier {
   // Chơi chạm / chuột: đôi găng đi theo ngón tay (toạ độ game), null = chưa chạm -> đứng giữa khung thành
   Offset? _touchPoint;
 
+  /// Găng đang đi theo ngón tay / chuột (không có tay trước camera) => canvas không chia 2 nửa sân
+  bool touchControl = false;
+
   /// Ngón tay / chuột đang ở [screenPos] (pixel trong vùng vẽ)
   void touchMoveTo(Offset screenPos) {
     final p = layout.fromScreen(screenPos);
@@ -230,7 +233,8 @@ class GoalkeeperEngine extends ChangeNotifier {
 
     // Găng tay luôn bám theo tay (kể cả lúc chờ & đếm ngược) để bé thấy mình đã vào vị trí
     final bool anyHand = motionState.leftHand.detected || motionState.rightHand.detected;
-    if (touchMode && !anyHand) {
+    touchControl = touchMode && !anyHand;
+    if (touchControl) {
       _updateTouchGloves(dt);
     } else {
       _updateGloves(dt, motionState);

@@ -571,13 +571,19 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
             'HANDS UP! 👐',
             style: TextStyle(color: KidColors.blueDark, fontSize: 28 * s, fontWeight: FontWeight.w900),
           ),
-          SizedBox(height: 12 * s),
+          SizedBox(height: 2 * s),
+          // Camera chia đôi màn hình: mỗi tay giữ 1 nửa khung thành (nửa tô màu trên sân)
+          Text(
+            'One hand on each side',
+            style: TextStyle(color: KidColors.textSoft, fontSize: 15 * s, fontWeight: FontWeight.w800),
+          ),
+          SizedBox(height: 10 * s),
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _buildHandIndicator('🤚', 'LEFT', _engine.leftGlove.detected, const Color(0xFF00B8D4), s),
+              _buildHandIndicator('🤚', '◀ LEFT', _engine.leftGlove.detected, const Color(0xFF00B8D4), s),
               SizedBox(width: 28 * s),
-              _buildHandIndicator('✋', 'RIGHT', _engine.rightGlove.detected, const Color(0xFFFF4081), s),
+              _buildHandIndicator('✋', 'RIGHT ▶', _engine.rightGlove.detected, const Color(0xFFFF4081), s),
             ],
           ),
         ],
@@ -968,8 +974,8 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
 
     if (_engine.phase == KeeperPhase.waitingHands) {
       headline = 'HANDS UP! 👐';
-      caption = 'Show me';
-      footnote = 'both hands';
+      caption = 'One hand';
+      footnote = 'on each side';
     } else if (_engine.phase == KeeperPhase.handsReady) {
       mood = RabbitMood.happy;
       headline = 'GREAT! 🎉';
