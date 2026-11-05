@@ -208,6 +208,9 @@ class KeeperLayout {
 
   Offset toScreen(double x, double y) => Offset(size.width / 2 + x * size.width * 0.44, size.height * 0.52 + y * size.height * 0.38);
 
+  /// Ngược lại [toScreen]: pixel màn hình -> toạ độ game (chơi chạm / chuột)
+  Offset fromScreen(Offset p) => Offset((p.dx - size.width / 2) / (size.width * 0.44), (p.dy - size.height * 0.52) / (size.height * 0.38));
+
   /// Bán kính bóng to dần theo chiều sâu Z (từ xa -> sát khung thành)
   double ballRadius(double z) => (18.0 + z * 50.0).clamp(16.0, 72.0) * u;
 

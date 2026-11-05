@@ -1,0 +1,16 @@
+{
+  "version": "1.0",
+  "type": "rich",
+  "title": "Enspire Arcade",
+  "author_name": "Enspire Digital",
+  "author_url": "https://motion-game-hub-web.web.app/",
+  "provider_name": "Enspire Digital",
+  "provider_url": "https://motion-game-hub-web.web.app/",
+  "cache_age": 86400,
+  "thumbnail_url": "https://motion-game-hub-web.web.app/icons/Icon-512.png",
+  "thumbnail_width": 512,
+  "thumbnail_height": 512,
+  "width": 960,
+  "height": 540,
+  "html": "<iframe src=\"https://motion-game-hub-web.web.app/\" width=\"960\" height=\"540\" style=\"border:0;max-width:100%;aspect-ratio:16/9;height:auto\" title=\"Enspire Arcade\" allow=\"camera; fullscreen; autoplay; gamepad\" allowfullscreen></iframe>"
+}

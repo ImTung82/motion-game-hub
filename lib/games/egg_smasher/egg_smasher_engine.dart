@@ -386,11 +386,25 @@ class EggSmasherEngine extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Đập trực tiếp tại vị trí chạm (chỉ dùng khi bật touch buttons trong Cài đặt)
-  void triggerSmashDirect(double px, double py) {
-    cursorX = px;
+  /// Chơi bằng chuột: búa đi theo con trỏ ([px] tỉ lệ bề ngang màn hình)
+  void touchHover(double px) {
+    if (!isPlaying || isGameOver || isPaused) return;
+    cursorX = px.clamp(0.18, 0.82);
+  }
+
+  /// Chơi bằng chạm: đập quả trứng gần chỗ chạm nhất theo chiều ngang (chạm khe giữa 2 trứng
+  /// hay chạm lên trời phía trên trứng vẫn trúng, bé nhỏ chạm không chuẩn)
+  void touchSmashAt(double px) {
+    EggItem? nearest;
+    for (final egg in eggs) {
+      if (egg.state == EggState.shattered) continue;
+      if (nearest == null || (px - egg.x).abs() < (px - nearest.x).abs()) nearest = egg;
+    }
+    if (nearest == null) return;
+    cursorX = nearest.x;
     cursorY = eggRowY;
-    _triggerSmash(px, eggRowY);
+    _triggerSmash(nearest.x, eggRowY);
+    notifyListeners();
   }
 
   void _triggerSmash(double px, double py) {

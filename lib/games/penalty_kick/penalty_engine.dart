@@ -350,8 +350,18 @@ class PenaltyEngine extends ChangeNotifier {
     SoundService.instance.playTada();
   }
 
-  // Hỗ trợ phím chạm màn hình
-  void touchShoot() {
+  bool get _canAim => !ball.inFlight && !ball.hasCollided && currentOutcome == ShotOutcome.none && !isGameOver && !isPaused;
+
+  /// Chơi bằng chuột: tâm ngắm đi theo con trỏ ([goalX] toạ độ trong khung thành, 0 = giữa, ±1 = cột dọc)
+  void touchAim(double goalX) {
+    if (!_canAim) return;
+    aimX = goalX.clamp(-maxAimX, maxAimX);
+  }
+
+  /// Chơi bằng chạm: chạm vào hình nào (hoặc cột nào của màn hình) thì sút thẳng vào giữa ô đó
+  void touchShootAt(double goalX) {
+    if (!_canAim) return;
+    aimX = targets[slotForX(goalX)].x;
     executePlayerShot();
     notifyListeners();
   }

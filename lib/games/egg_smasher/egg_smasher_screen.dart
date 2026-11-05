@@ -12,6 +12,7 @@ import '../../ui/widgets/rabbit_mascot.dart';
 import '../../ui/widgets/lives_hearts.dart';
 import '../../ui/widgets/ready_gate.dart';
 import '../../ui/widgets/score_fly_layer.dart';
+import '../../ui/widgets/touch_hint.dart';
 import 'egg_smasher_canvas.dart';
 import 'egg_smasher_engine.dart';
 
@@ -36,6 +37,8 @@ class _EggSmasherScreenState extends State<EggSmasherScreen> with SingleTickerPr
   final GlobalKey<ScoreFlyLayerState> _flyLayerKey = GlobalKey<ScoreFlyLayerState>();
   final GlobalKey _scoreKey = GlobalKey();
   int _shownScore = 0;
+
+  bool _touchUsed = false; // chơi chạm: đã chạm lần đầu -> ẩn gợi ý
 
   // Trạng thái PiP camera trước khi vào game (để khôi phục cho các game khác)
   bool _prevShowCameraPip = true;
@@ -74,7 +77,8 @@ class _EggSmasherScreenState extends State<EggSmasherScreen> with SingleTickerPr
     _time.value += clampedDt;
 
     final ctrl = widget.motionController;
-    if (!_engine.isPaused) _readyGate.update(clampedDt, ctrl.state, cameraAvailable: ctrl.cameraAvailable, calibrating: ctrl.isCalibrating);
+    // Chơi chạm: không chờ thấy mặt / tay, đếm ngược luôn
+    if (!_engine.isPaused) _readyGate.update(clampedDt, ctrl.state, cameraAvailable: !ctrl.touchMode, calibrating: ctrl.isCalibrating);
     if (!_readyGate.isDone) return; // chưa thấy mặt / tay hoặc đang đếm ngược: game đứng yên
 
     _engine.update(clampedDt, ctrl.state);
@@ -152,26 +156,31 @@ class _EggSmasherScreenState extends State<EggSmasherScreen> with SingleTickerPr
             ),
           ),
 
-          // 1. VÙNG GAME CANVAS (chạm để đập CHỈ khi bật "touch buttons" trong Cài đặt)
+          // 1. VÙNG GAME CANVAS. Chơi chạm (không có camera / bật trong Cài đặt): chạm để đập trứng,
+          //    rê chuột để di búa. Có camera thì chỉ chơi bằng cử chỉ.
           LayoutBuilder(
             builder: (context, constraints) {
               _engine.setNestGroundY(_nestGroundY(constraints.biggest));
-              return GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapDown: (details) {
-                  if (!widget.motionController.showTouchControls) return; // tắt cảm ứng: chỉ chơi bằng cử chỉ
-                  if (!_readyGate.isDone) return; // chưa "GO!"
-                  final px = details.localPosition.dx / constraints.maxWidth;
-                  final py = details.localPosition.dy / constraints.maxHeight;
-                  _engine.triggerSmashDirect(px, py);
+              return MouseRegion(
+                onHover: (e) {
+                  if (!widget.motionController.touchMode || !_readyGate.isDone) return;
+                  _engine.touchHover(e.localPosition.dx / constraints.maxWidth);
                 },
-                // RepaintBoundary: canvas vẽ lại mỗi khung, HUD phía trên không phải vẽ lại theo
-                child: RepaintBoundary(
-                  child: CustomPaint(
-                    size: Size(constraints.maxWidth, constraints.maxHeight),
-                    painter: EggSmasherCanvasPainter(
-                      engine: _engine,
-                      time: _time,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapDown: (details) {
+                    if (!widget.motionController.touchMode || !_readyGate.isDone) return; // chưa "GO!"
+                    if (!_touchUsed) setState(() => _touchUsed = true);
+                    _engine.touchSmashAt(details.localPosition.dx / constraints.maxWidth);
+                  },
+                  // RepaintBoundary: canvas vẽ lại mỗi khung, HUD phía trên không phải vẽ lại theo
+                  child: RepaintBoundary(
+                    child: CustomPaint(
+                      size: Size(constraints.maxWidth, constraints.maxHeight),
+                      painter: EggSmasherCanvasPainter(
+                        engine: _engine,
+                        time: _time,
+                      ),
                     ),
                   ),
                 ),
@@ -201,6 +210,20 @@ class _EggSmasherScreenState extends State<EggSmasherScreen> with SingleTickerPr
           // 5. THỎ LINH VẬT + BÓNG THOẠI: đọc đề / khen khi đập đúng / buồn khi đập sai
           //    Đứng trên logo ở góc dưới trái, bóng thoại phía trên (vùng trời, không che trứng)
           _buildRabbitMascot(s, pad),
+
+          // 5a. GỢI Ý CHƠI CHẠM (ẩn sau lần chạm đầu): giữa vùng trời, trên hàng trứng
+          if (!_touchUsed)
+            ListenableSelector(
+              listenable: Listenable.merge([widget.motionController, _readyGate]),
+              selector: () => widget.motionController.touchMode && _readyGate.isDone,
+              builder: (context, _) {
+                if (!widget.motionController.touchMode || !_readyGate.isDone) return const SizedBox.shrink();
+                return Align(
+                  alignment: const Alignment(0, -0.4),
+                  child: TouchHint(text: 'Tap the right egg!', scale: s),
+                );
+              },
+            ),
 
           // 5b. ĐIỂM BAY VỀ Ô TỔNG ĐIỂM
           Positioned.fill(

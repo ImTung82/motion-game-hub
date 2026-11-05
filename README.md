@@ -92,6 +92,16 @@ flutter build web --wasm
 firebase deploy --only hosting   # -> https://motion-game-hub-web.web.app
 ```
 
+**Nhúng vào website khác** (giống YouTube): trang hỗ trợ oEmbed chỉ cần dán link `https://motion-game-hub-web.web.app/`
+(trang khai báo `web/oembed.json`). Nhúng tay thì bắt buộc có `allow="camera"`, thiếu thì game báo và mời mở tab mới:
+
+```html
+<iframe src="https://motion-game-hub-web.web.app/" width="960" height="540" style="border:0"
+        allow="camera; fullscreen; autoplay; gamepad" allowfullscreen></iframe>
+```
+
+Trong iframe, website mẹ thường không gửi COEP nên Flutter vẽ đơn luồng (vẫn chạy, chậm hơn một chút trên máy yếu).
+
 Lần đầu mở app cần **cấp quyền camera**. Nên chơi ở nơi đủ sáng, đặt máy ngang và đứng cách camera khoảng 0,5-1 m (chế độ 2 tay: 1-1,5 m).
 
 Tạo lại icon ứng dụng từ logo:

@@ -31,6 +31,26 @@
 
   <title>Enspire Arcade</title>
   <link rel="manifest" href="manifest.json">
+
+  <!--
+    Nhúng vào website khác (giống YouTube): trang đối tác tải HTML này, tìm link oEmbed bên dưới rồi đọc
+    oembed.json để lấy tiêu đề, tác giả, ảnh xem trước và mã <iframe> (có allow="camera").
+    Link để tuyệt đối vì bên đọc thường không tự ghép đường dẫn tương đối.
+  -->
+  <link rel="alternate" type="application/json+oembed" href="https://motion-game-hub-web.web.app/oembed.json?url=https%3A%2F%2Fmotion-game-hub-web.web.app%2F&amp;format=json" title="Enspire Arcade">
+  <link rel="canonical" href="https://motion-game-hub-web.web.app/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Enspire Digital">
+  <meta property="og:title" content="Enspire Arcade">
+  <meta property="og:description" content="Motion-controlled English learning games for kids. Play with your face and hands!">
+  <meta property="og:url" content="https://motion-game-hub-web.web.app/">
+  <meta property="og:image" content="https://motion-game-hub-web.web.app/icons/Icon-512.png">
+  <meta name="twitter:card" content="player">
+  <meta name="twitter:title" content="Enspire Arcade">
+  <meta name="twitter:image" content="https://motion-game-hub-web.web.app/icons/Icon-512.png">
+  <meta name="twitter:player" content="https://motion-game-hub-web.web.app/">
+  <meta name="twitter:player:width" content="960">
+  <meta name="twitter:player:height" content="540">
 </head>
 <body>
   <!--

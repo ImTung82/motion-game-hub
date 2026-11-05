@@ -232,6 +232,13 @@ class FaceMotionController extends ChangeNotifier {
   }
 
   bool get showTouchControls => _showTouchControls;
+
+  /// Chơi bằng chạm / chuột: không có camera (bị từ chối quyền, trang nhúng chặn, máy không có webcam)
+  /// hoặc bật "touch buttons" trong Cài đặt. Lúc camera còn đang mở (chờ cấp quyền) thì chưa tính.
+  bool get touchMode => noCamera || _showTouchControls;
+
+  /// Đã thử mở camera nhưng không được => chỉ chơi được bằng chạm / chuột
+  bool get noCamera => _isInitialized && !_cameraAvailable;
   set showTouchControls(bool value) {
     _showTouchControls = value;
     _savePreferences();
