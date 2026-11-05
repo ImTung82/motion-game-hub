@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants.dart';
@@ -97,6 +98,12 @@ class FaceMotionController extends ChangeNotifier {
   final OneEuroFilter _steerFilter = OneEuroFilter.likeEma(0.35, beta: 1.5);
   double _handDeadzone = 0.18;
   double _handSensitivity = 1.8; // Độ nhạy / Tầm lướt tay (1.2 -> 4.0)
+
+  /// Quãng đưa tay ngang (tỉ lệ bề ngang khung hình camera) ứng với lái hết cỡ ở độ nhạy 2.0x.
+  /// Web rộng hơn Android: webcam laptop / PC thường ở gần người chơi hơn camera điện thoại / tablet, nên cùng
+  /// 1 cú đưa tay chiếm phần khung hình lớn hơn => cùng thông số thì web nhạy hơn hẳn. Với độ nhạy mặc định
+  /// 2.4x: Android lái hết cỡ khi đưa tay ~17% khung hình, web ~23%. Thanh "Hand reach" vẫn chỉnh thêm được.
+  static const double _handReach = kIsWeb ? 0.25 : 0.18;
   double _fistThreshold = 0.45; // Ngưỡng kích hoạt Nắm tay (0.20 -> 0.75)
   double _smoothedFistScore = 0.0;
   // Thời gian (giây) điều kiện nắm / xoè đã giữ liên tục: thay cho "2 khung liên tiếp" (= ~50ms ở 30 lần/giây)
@@ -891,7 +898,7 @@ class FaceMotionController extends ChangeNotifier {
     // B. Chuẩn hóa vị trí đưa/lướt tay sang trái - phải (Left/Right Reach):
     double normPos = 0.0;
     if (relativeX.abs() > 0.02) {
-      normPos = relativeX.sign * ((relativeX.abs() - 0.02) / 0.18).clamp(0.0, 1.0);
+      normPos = relativeX.sign * ((relativeX.abs() - 0.02) / _handReach).clamp(0.0, 1.0);
     }
 
     // C. Kết hợp thông minh (Cả đưa tay ngang lẫn nghiêng bàn tay đều đúng chiều 100%):
