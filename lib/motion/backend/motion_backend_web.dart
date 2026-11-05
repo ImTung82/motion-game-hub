@@ -22,6 +22,7 @@ extension type _MotionBridge._(JSObject _) implements JSObject {
   external JSPromise<_StartResult> start(_StartOptions options);
   external void stop();
   external void setMode(String mode);
+  external void setMaxHands(int count);
   external web.HTMLVideoElement createPreview();
   external set onHands(JSFunction? callback);
   external set onFace(JSFunction? callback);
@@ -57,6 +58,12 @@ class WebMotionBackend extends MotionBackend {
     _bridge?.setMode(_modeName(value));
   }
 
+  @override
+  set maxHands(int value) {
+    super.maxHands = value;
+    _bridge?.setMaxHands(value);
+  }
+
   static String _modeName(MotionInputMode mode) => mode == MotionInputMode.hand ? 'hand' : 'face';
 
   @override
@@ -64,6 +71,7 @@ class WebMotionBackend extends MotionBackend {
     final bridge = await _waitForBridge();
     bridge.onHands = _handleHands.toJS;
     bridge.onFace = _handleFace.toJS;
+    bridge.setMaxHands(maxHands);
 
     final result = await bridge.start(_StartOptions(mode: _modeName(mode))).toDart;
     _bridge = bridge;

@@ -13,9 +13,14 @@ const SLOW_DETECT_MS = 60;
 const FRAME_JITTER_MS = 8;
 // Worker không trả lời quá lâu (VD: đang nạp model GPU) thì cho gửi khung mới
 const RESULT_TIMEOUT_MS = 1000;
-// Bộ xử lý AI: GPU (đo trên điện thoại: ~22ms/lần, game vẫn 60 FPS vì AI chạy trong worker);
-// CPU chậm gấp ~3 lần. Dò lỗi trên máy lạ (VD: TV GPU yếu) bằng ?delegate=CPU trên URL.
-let delegate = new URLSearchParams(location.search).get('delegate')?.toUpperCase() === 'CPU' ? 'CPU' : 'GPU';
+// Bộ xử lý AI: GPU mặc định; worker tự đo GPU vs CPU ngay trên máy đang chạy (lúc game đang vẽ) và chọn bên
+// nhanh hơn, nhớ kết quả theo GPU + phiên bản Chrome (xem benchStep trong motion_worker.js).
+// Ép cố định để dò lỗi trên máy lạ: ?delegate=CPU hoặc ?delegate=GPU trên URL (tắt tự đo).
+const forcedDelegate = (() => {
+  const v = new URLSearchParams(location.search).get('delegate')?.toUpperCase();
+  return v === 'CPU' || v === 'GPU' ? v : null;
+})();
+let delegate = forcedDelegate === 'CPU' ? 'CPU' : 'GPU';
 // MediaPipe lỗi (VD: GPU vài máy trả NaN) => dựng lại worker, tối đa 1 lần / 3s.
 // GPU lỗi 3 lần trong 1 phút thì chuyển hẳn sang CPU cho phiên này.
 const RESTART_MIN_GAP_MS = 3000;
@@ -51,8 +56,28 @@ function saveGpuOk(ok) {
   } catch (_) {}
 }
 
+// Kết quả đo GPU vs CPU của từng model (hand / face), cùng khoá máy với GPU_KEY
+const choiceKey = (kind) => GPU_KEY.replace('motion.gpuOk:', `motion.delegate.${kind}:`);
+
+function loadChoices() {
+  const out = {};
+  for (const kind of ['hand', 'face']) {
+    try {
+      const v = localStorage.getItem(choiceKey(kind));
+      if (v === 'CPU' || v === 'GPU') out[kind] = v;
+    } catch (_) {}
+  }
+  return out;
+}
+
+function saveChoice(kind, value) {
+  try {
+    localStorage.setItem(choiceKey(kind), value);
+  } catch (_) {}
+}
+
 const initialGpuOk = loadGpuOk();
-if (initialGpuOk === false) delegate = 'CPU'; // máy đã biết GPU hỏng: dùng CPU ngay
+if (initialGpuOk === false && !forcedDelegate) delegate = 'CPU'; // máy đã biết GPU hỏng: dùng CPU ngay
 
 let worker = null;
 let stream = null;
@@ -64,9 +89,14 @@ let inFlight = false; // đang chờ worker trả kết quả khung trước (ch
 let frameWaiting = false; // có khung mới tới trong lúc worker bận => gửi ngay khi worker xong
 let lastSent = 0;
 let interval = FAST_INTERVAL_MS;
+// Số tay tối đa cần nhận diện (game 1 tay = 1, game 2 tay = 2) — Flutter báo qua setMaxHands
+let maxHands = 1;
 
 // Số liệu đo hiệu năng (xem trong DevTools: motionBridge.stats)
-const stats = { detectFps: 0, avgCostMs: 0, intervalMs: FAST_INTERVAL_MS, delegate: {}, gpuOk: null, video: '', error: '', restarts: 0 };
+const stats = {
+  detectFps: 0, avgCostMs: 0, intervalMs: FAST_INTERVAL_MS, maxHands, delegate: {}, choice: loadChoices(), bench: {},
+  gpuOk: null, video: '', error: '', restarts: 0,
+};
 let statFrames = 0;
 let statCost = 0;
 let statStart = 0;
@@ -81,7 +111,15 @@ function ensureWorker() {
     stats.error = e.message;
     inFlight = false;
   };
-  worker.postMessage({ type: 'prepare', mode, delegate, gpuOk: loadGpuOk() });
+  worker.postMessage({
+    type: 'prepare',
+    mode,
+    delegate,
+    gpuOk: forcedDelegate === 'GPU' ? true : loadGpuOk(),
+    decided: forcedDelegate ? {} : loadChoices(),
+    autoBench: !forcedDelegate,
+    numHands: maxHands,
+  });
   return worker;
 }
 
@@ -95,7 +133,7 @@ function restartWorker(reason) {
   if (delegate === 'GPU') {
     gpuFailures = gpuFailures.filter((t) => now - t < 60000);
     gpuFailures.push(now);
-    if (gpuFailures.length >= GPU_FAILURES_BEFORE_CPU) {
+    if (gpuFailures.length >= GPU_FAILURES_BEFORE_CPU && forcedDelegate !== 'GPU') {
       console.warn('[motion] GPU keeps failing on this device, switching to CPU');
       delegate = 'CPU';
       saveGpuOk(false);
@@ -114,6 +152,13 @@ function onWorkerMessage(event) {
   switch (msg.type) {
     case 'delegate':
       stats.delegate[msg.kind] = msg.delegate;
+      return;
+    case 'delegate-choice':
+      // Kết quả đo GPU vs CPU của model này trên máy này: lưu lại, lần sau khỏi đo
+      stats.choice[msg.kind] = msg.delegate;
+      stats.bench[msg.kind] = { gpuMs: msg.gpuMs && Math.round(msg.gpuMs), cpuMs: msg.cpuMs && Math.round(msg.cpuMs) };
+      saveChoice(msg.kind, msg.delegate);
+      console.info(`[motion] ${msg.kind}: ${msg.delegate} (GPU ${stats.bench[msg.kind].gpuMs}ms, CPU ${stats.bench[msg.kind].cpuMs ?? '-'}ms)`);
       return;
     case 'gpu-check':
       stats.gpuOk = msg.ok;
@@ -137,7 +182,8 @@ function onWorkerMessage(event) {
   }
 }
 
-function onResult({ mode: resultMode, data, count, width, height, cost }) {
+function onResult({ mode: resultMode, data, count, width, height, cost, delegate: used }) {
+  if (used) stats.delegate[resultMode] = used;
   interval = cost > SLOW_DETECT_MS ? SLOW_INTERVAL_MS : FAST_INTERVAL_MS;
 
   const now = performance.now();
@@ -222,6 +268,15 @@ function setMode(newMode) {
   worker?.postMessage({ type: 'prepare', mode, delegate });
 }
 
+/** Số tay tối đa cần nhận diện: 1 cho game 1 tay (nhanh gấp ~2 lần khi chỉ giơ 1 tay), 2 cho game 2 tay */
+function setMaxHands(n) {
+  n = n >= 2 ? 2 : 1;
+  if (n === maxHands) return;
+  maxHands = n;
+  stats.maxHands = n;
+  worker?.postMessage({ type: 'config', numHands: n });
+}
+
 /** <video> xem trước cho HtmlElementView (lật gương như camera trước trên điện thoại) */
 function createPreview() {
   const el = document.createElement('video');
@@ -285,10 +340,22 @@ const bridge = {
   start,
   stop,
   setMode,
+  setMaxHands,
   createPreview,
   listCameras,
   stats,
-  debug: { log: () => debugLog, restartWorker: () => restartWorker("manual") }, // dò lỗi trong DevTools
+  // Dò lỗi trong DevTools. resetDelegateChoice(): quên kết quả đo GPU/CPU, tải lại trang để đo lại
+  debug: {
+    log: () => debugLog,
+    restartWorker: () => restartWorker('manual'),
+    resetDelegateChoice: () => {
+      for (const kind of ['hand', 'face']) {
+        try {
+          localStorage.removeItem(choiceKey(kind));
+        } catch (_) {}
+      }
+    },
+  },
   onHands: null, // (Float32Array data, int count, width, height, costMs)
   onFace: null, // (Float32Array | null data, width, height, costMs)
 };

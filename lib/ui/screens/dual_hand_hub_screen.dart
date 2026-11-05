@@ -36,6 +36,14 @@ class _DualHandHubScreenState extends State<DualHandHubScreen> {
     if (widget.motionController.inputMode != MotionInputMode.hand) {
       widget.motionController.inputMode = MotionInputMode.hand;
     }
+    // Hub & game ở đây dùng 2 tay (game mở chồng lên hub nên hub vẫn sống trong lúc chơi)
+    widget.motionController.holdTwoHands();
+  }
+
+  @override
+  void dispose() {
+    widget.motionController.releaseTwoHands();
+    super.dispose();
   }
 
   void _openCalibration() {

@@ -5,6 +5,7 @@ import '../core/constants.dart';
 import 'backend/motion_backend.dart';
 import 'backend/motion_backend_factory.dart';
 import 'motion_state.dart';
+import 'signal_filters.dart';
 
 /// Bộ điều khiển cử chỉ khuôn mặt và bàn tay (Face & Hand Motion Controller)
 class FaceMotionController extends ChangeNotifier {
@@ -50,12 +51,19 @@ class FaceMotionController extends ChangeNotifier {
   double _neutralYaw = 0.0;
   double _neutralPitch = 0.0;
 
-  // Bộ lọc EMA Face
+  // Bộ lọc Face. Mọi bộ lọc tính theo THỜI GIAN giữa 2 kết quả (signal_filters.dart), không theo số kết quả:
+  // máy nhận diện chậm (VD 12 lần/giây trên web) không bị trễ gấp đôi, gấp ba máy nhanh.
+  // Góc đầu dùng One Euro: đứng yên lọc như EMA cũ (hết rung), quay/gật nhanh thì bám ngay (hết trễ).
+  final OneEuroFilter _rollFilter = OneEuroFilter.likeEma(MotionDefaults.emaAlpha, beta: 0.08);
+  final OneEuroFilter _yawFilter = OneEuroFilter.likeEma(MotionDefaults.emaAlpha, beta: 0.08);
+  final OneEuroFilter _pitchFilter = OneEuroFilter.likeEma(MotionDefaults.emaAlpha, beta: 0.08);
   double _smoothedRoll = 0.0;
   double _smoothedMouth = 0.0;
   double _smoothedYaw = 0.0;
   double _smoothedPitch = 0.0;
   bool _hasInitialValues = false;
+  DateTime? _lastFaceSampleTime;
+  double _calibSampleSec = 0.0; // thời gian đã lấy mẫu cân bằng liên tục (mặt / tay đứng yên)
 
   // Tự động hiệu chỉnh Hand & Face
   bool _isCalibrating = false;
@@ -77,21 +85,23 @@ class FaceMotionController extends ChangeNotifier {
   double _calibHandYSum = 0.0;
   double _calibDirXSum = 0.0;
   double _calibDirYSum = 0.0;
-  double _smoothHandTilt = 0.0; // góc nghiêng TƯƠNG ĐỐI so với hướng tay lúc cân bằng (độ)
-  bool _hasSmoothHandTilt = false;
+  // Góc nghiêng TƯƠNG ĐỐI so với hướng tay lúc cân bằng (độ)
+  final OneEuroFilter _handTiltFilter = OneEuroFilter.likeEma(0.38, beta: 0.08);
   bool _isHandSteeringActive = false; // trạng thái trễ (hysteresis) cho TRÁI/PHẢI
-  int _calibAttempts = 0;
+  double _calibElapsedSec = 0.0; // thời gian đã thử cân bằng tay (kể cả lúc tay còn rung)
   double _lastCalibX = 0.0;
   double _lastCalibY = 0.0;
   int _calibratedHandRotation = -1; // góc quét AI tại thời điểm cân bằng tay
   double _currentHandTilt = 0.0;
-  double _filteredHandX = 0.0;
+  // Lọc chống giật cho giá trị lái cuối cùng (handX / steerX)
+  final OneEuroFilter _steerFilter = OneEuroFilter.likeEma(0.35, beta: 1.5);
   double _handDeadzone = 0.18;
   double _handSensitivity = 1.8; // Độ nhạy / Tầm lướt tay (1.2 -> 4.0)
   double _fistThreshold = 0.45; // Ngưỡng kích hoạt Nắm tay (0.20 -> 0.75)
   double _smoothedFistScore = 0.0;
-  int _fistActivateDebounce = 0;
-  int _fistReleaseDebounce = 0;
+  // Thời gian (giây) điều kiện nắm / xoè đã giữ liên tục: thay cho "2 khung liên tiếp" (= ~50ms ở 30 lần/giây)
+  double _fistActivateHeld = 0.0;
+  double _fistReleaseHeld = 0.0;
   bool _isHandFistState = false;
   double _smoothFlex = 1.0;
   final List<_HandChopSample> _chopHistory = [];
@@ -106,17 +116,30 @@ class FaceMotionController extends ChangeNotifier {
   double get maxHandSpan => _maxHandSpan;
 
   // Trạng thái theo dõi 2 bàn tay (Dual-Hand Tracking)
-  bool _hasSmoothLeft = false;
-  double _smoothLeftX = 0.0;
-  double _smoothLeftY = 0.0;
+  final OneEuroFilter _leftXFilter = OneEuroFilter.likeEma(0.45, beta: _handPosBeta);
+  final OneEuroFilter _leftYFilter = OneEuroFilter.likeEma(0.45, beta: _handPosBeta);
   double _smoothLeftFist = 0.0;
   bool _isLeftFist = false;
 
-  bool _hasSmoothRight = false;
-  double _smoothRightX = 0.0;
-  double _smoothRightY = 0.0;
+  final OneEuroFilter _rightXFilter = OneEuroFilter.likeEma(0.45, beta: _handPosBeta);
+  final OneEuroFilter _rightYFilter = OneEuroFilter.likeEma(0.45, beta: _handPosBeta);
   double _smoothRightFist = 0.0;
   bool _isRightFist = false;
+
+  // Số nơi đang cần nhận diện 2 tay (hub 2 tay, thẻ "2 tay" trong Hiệu chỉnh). Không ai cần => chỉ tìm 1 tay:
+  // MediaPipe phải chạy lại bước TÌM bàn tay mỗi khung khi số tay thấy < số tay tối đa => 1 tay nhanh gấp ~2.
+  int _twoHandHolds = 0;
+
+  /// Bắt đầu cần nhận diện 2 tay; gọi [releaseTwoHands] đúng 1 lần khi xong
+  void holdTwoHands() {
+    _twoHandHolds++;
+    _backend.maxHands = 2;
+  }
+
+  void releaseTwoHands() {
+    if (_twoHandHolds > 0) _twoHandHolds--;
+    _backend.maxHands = _twoHandHolds > 0 ? 2 : 1;
+  }
 
   bool _isClapArmed = false;
   DateTime _lastClapTime = DateTime.fromMillisecondsSinceEpoch(0);
@@ -322,7 +345,8 @@ class FaceMotionController extends ChangeNotifier {
     if (face == null) {
       _hasSmoothFaceVisual = false;
       _consecutiveEmptyFrames++;
-      if (_consecutiveEmptyFrames >= 6) {
+      // Tự săn góc xoay AI chỉ có nghĩa khi backend xoay được ảnh (Android); web luôn đúng chiều
+      if (_backend.supportsRotation && _consecutiveEmptyFrames >= 6) {
         _aiRotationOffset = (_aiRotationOffset + 1) % 4;
         _consecutiveEmptyFrames = 0;
       }
@@ -353,6 +377,8 @@ class FaceMotionController extends ChangeNotifier {
   // XỬ LÝ CỬ CHỈ KHUÔN MẶT (FACE MODE)
   // ==========================================
   void _processFaceMetrics(FaceSample face, int latency, DateTime timestamp, double currentFps) {
+    final double dt = sampleDt(_lastFaceSampleTime, timestamp);
+    _lastFaceSampleTime = timestamp;
     final rawRoll = face.rawRoll;
     final rawYaw = face.rawYaw;
     final rawPitch = face.rawPitch;
@@ -362,18 +388,14 @@ class FaceMotionController extends ChangeNotifier {
     final rightEyeOpen = face.rightEyeOpen;
     final isWinking = (leftEyeOpen - rightEyeOpen).abs() > 0.5;
 
+    _smoothedRoll = _rollFilter.filter(rawRoll, dt);
+    _smoothedYaw = _yawFilter.filter(rawYaw, dt);
+    _smoothedPitch = _pitchFilter.filter(rawPitch, dt);
     if (!_hasInitialValues) {
-      _smoothedRoll = rawRoll;
       _smoothedMouth = rawMouth;
-      _smoothedYaw = rawYaw;
-      _smoothedPitch = rawPitch;
       _hasInitialValues = true;
     } else {
-      const alpha = MotionDefaults.emaAlpha;
-      _smoothedRoll = _smoothedRoll + alpha * (rawRoll - _smoothedRoll);
-      _smoothedMouth = _smoothedMouth + alpha * (rawMouth - _smoothedMouth);
-      _smoothedYaw = _smoothedYaw + alpha * (rawYaw - _smoothedYaw);
-      _smoothedPitch = _smoothedPitch + alpha * (rawPitch - _smoothedPitch);
+      _smoothedMouth += (rawMouth - _smoothedMouth) * timedAlpha(MotionDefaults.emaAlpha, dt);
     }
 
     // Tự động căn mốc trung tính Face
@@ -384,8 +406,10 @@ class FaceMotionController extends ChangeNotifier {
       _calibYawSum += _smoothedYaw;
       _calibPitchSum += _smoothedPitch;
       _calibrationFrames++;
+      _calibSampleSec += dt;
 
-      if (_calibrationFrames >= 6) {
+      // ~6 khung ở 30 lần/giây (0,2s); máy chậm thì đủ thời gian & ít nhất 3 mẫu là xong
+      if (_calibrationFrames >= 6 || (_calibrationFrames >= 3 && _calibSampleSec >= 6 * kTunedSampleDt)) {
         _neutralRoll = _calibRollSum / _calibrationFrames;
         _baselineMouth = _calibMouthSum / _calibrationFrames;
         _neutralYaw = _calibYawSum / _calibrationFrames;
@@ -397,17 +421,19 @@ class FaceMotionController extends ChangeNotifier {
         _calibYawSum = 0.0;
         _calibPitchSum = 0.0;
         _calibrationFrames = 0;
+        _calibSampleSec = 0.0;
         _savePreferences();
         notifyListeners();
       }
     } else {
       final curYawDiff = _smoothedYaw - _neutralYaw;
+      final double drift = timedAlpha(0.015, dt);
       if (curYawDiff.abs() < 5.0) {
-        _neutralYaw += curYawDiff * 0.015;
+        _neutralYaw += curYawDiff * drift;
       }
       final curRollDiff = _smoothedRoll - _neutralRoll;
       if (curRollDiff.abs() < 4.0) {
-        _neutralRoll += curRollDiff * 0.015;
+        _neutralRoll += curRollDiff * drift;
       }
     }
 
@@ -468,8 +494,9 @@ class FaceMotionController extends ChangeNotifier {
       _smoothFaceVisualY = faceVY;
       _hasSmoothFaceVisual = true;
     } else {
-      _smoothFaceVisualX += (faceVX - _smoothFaceVisualX) * 0.45;
-      _smoothFaceVisualY += (faceVY - _smoothFaceVisualY) * 0.45;
+      final double a = timedAlpha(0.45, dt);
+      _smoothFaceVisualX += (faceVX - _smoothFaceVisualX) * a;
+      _smoothFaceVisualY += (faceVY - _smoothFaceVisualY) * a;
     }
 
     _state = MotionState(
@@ -512,8 +539,14 @@ class FaceMotionController extends ChangeNotifier {
   double _smoothFaceVisualX = 0.0;
   double _smoothFaceVisualY = 0.0;
   int _handLostFrames = 0;
-  bool _hasSmoothHand = false;
-  double _smoothHandX = 0.0; // toạ độ màn hình (đã lật gương) trừ 0.5
+  double _handLostSec = 0.0; // tay mất liên tục bao lâu
+  DateTime? _lastHandSampleTime;
+  // Tâm lòng bàn tay: toạ độ màn hình (đã lật gương) trừ 0.5. One Euro: tay đứng yên hết rung, vung nhanh hết trễ.
+  // beta theo đơn vị "chiều ngang khung hình / giây" (vung tay ~1-2/giây).
+  static const double _handPosBeta = 5.0;
+  final OneEuroFilter _handXFilter = OneEuroFilter.likeEma(0.45, beta: _handPosBeta);
+  final OneEuroFilter _handYFilter = OneEuroFilter.likeEma(0.45, beta: _handPosBeta);
+  double _smoothHandX = 0.0;
   double _smoothHandY = 0.0;
   int _handResultCount = 0;
   DateTime _handFpsStart = DateTime.now();
@@ -550,18 +583,18 @@ class FaceMotionController extends ChangeNotifier {
 
   void _markHandLost() {
     _isHandFistState = false;
-    _fistActivateDebounce = 0;
-    _fistReleaseDebounce = 0;
+    _fistActivateHeld = 0.0;
+    _fistReleaseHeld = 0.0;
     _smoothedFistScore = 0.0;
-    _hasSmoothHand = false;
+    _handXFilter.reset();
+    _handYFilter.reset();
     _chopHistory.clear();
     _smoothChopScore = 0.0;
-    _hasSmoothHandTilt = false;
+    _handTiltFilter.reset();
     _currentHandTilt = 0.0;
-    _filteredHandX = 0.0;
+    _steerFilter.reset(0.0);
     _isHandSteeringActive = false;
-    _hasSmoothLeft = false;
-    _hasSmoothRight = false;
+    _resetDualHandFilters(left: true, right: true);
     _isClapArmed = false;
     _state = _state.copyWith(
       inputMode: MotionInputMode.hand,
@@ -588,6 +621,8 @@ class FaceMotionController extends ChangeNotifier {
     final hands = frame.hands;
 
     final now = DateTime.now();
+    final double dt = sampleDt(_lastHandSampleTime, now);
+    _lastHandSampleTime = now;
     _handResultCount++;
     final fpsElapsed = now.difference(_handFpsStart).inMilliseconds;
     if (fpsElapsed >= 1000) {
@@ -598,19 +633,24 @@ class FaceMotionController extends ChangeNotifier {
 
     if (hands.isEmpty || hands.first.length < 21) {
       _handLostFrames++;
-      // Tự động săn góc xoay AI: chỉ khi mất tay lâu (~1.5s). Trước đây đổi góc sau 0.4s khiến
-      // tay bị che thoáng qua cũng đổi hệ toạ độ -> trục trái/phải bị xoay, điều khiển loạn.
-      if (_handLostFrames % 45 == 0) {
+      final double lostBefore = _handLostSec;
+      _handLostSec += dt;
+      // Tự động săn góc xoay AI (chỉ Android: web luôn đúng chiều): chỉ khi mất tay lâu (~1.5s). Trước đây đổi
+      // góc sau 0.4s khiến tay bị che thoáng qua cũng đổi hệ toạ độ -> trục trái/phải bị xoay, điều khiển loạn.
+      // (Đổi góc còn bắt cân bằng lại tay => trên web từng làm tay "đơ" mỗi lần hạ tay xuống rồi giơ lên.)
+      if (_backend.supportsRotation && _handLostFrames % 45 == 0) {
         _aiHandRotationIndex = (_aiHandRotationIndex + 1) % 4;
       }
-      // Cho phép mất tối đa 5 frame liên tiếp để không bị chớp
-      if (_handLostFrames == 6 || (_handLostFrames > 6 && _state.handDetected)) {
+      // Cho phép mất tay ~0,2s (5 khung ở 30 lần/giây) để không bị chớp
+      const double lostAfterSec = 5.5 * kTunedSampleDt;
+      if (_handLostSec >= lostAfterSec && (lostBefore < lostAfterSec || _state.handDetected)) {
         _markHandLost();
       }
       return;
     }
 
     _handLostFrames = 0;
+    _handLostSec = 0.0;
 
     // Góc quét AI khác lúc cân bằng => hệ toạ độ landmark đã xoay, mốc cũ vô nghĩa -> cân bằng lại
     if (_hasHandCalibratedOnce && !_isCalibrating && _calibratedHandRotation != -1 &&
@@ -647,14 +687,8 @@ class FaceMotionController extends ChangeNotifier {
     final double rawX = screenCx - 0.5; // [-0.5, +0.5]
     final double rawY = screenCy - 0.5; // [-0.5, +0.5]
 
-    if (!_hasSmoothHand) {
-      _smoothHandX = rawX;
-      _smoothHandY = rawY;
-      _hasSmoothHand = true;
-    } else {
-      _smoothHandX += (rawX - _smoothHandX) * 0.45;
-      _smoothHandY += (rawY - _smoothHandY) * 0.45;
-    }
+    _smoothHandX = _handXFilter.filter(rawX, dt);
+    _smoothHandY = _handYFilter.filter(rawY, dt);
 
     // Tọa độ Reticle hiển thị: khớp 100% vị trí bàn tay trên màn hình preview
     final double visualX = (_smoothHandX * 2.0).clamp(-1.0, 1.0);
@@ -701,7 +735,7 @@ class FaceMotionController extends ChangeNotifier {
     }
 
     final double rawChopScore = (dropY / 0.08).clamp(0.0, 1.0);
-    _smoothChopScore += (rawChopScore - _smoothChopScore) * 0.70;
+    _smoothChopScore += (rawChopScore - _smoothChopScore) * timedAlpha(0.70, dt);
 
     bool isChop = false;
     // CỬ CHỈ HẠ TAY XUỐNG ĐẬP HỢP LỆ (DOWNWARD SLAM):
@@ -745,7 +779,7 @@ class FaceMotionController extends ChangeNotifier {
     final double rawFlexScore = math.max(flexFromElevation, flexFromDir);
 
     // Phản hồi nhanh (0.65) để khi gập là thanh nhảy ngay tức thì
-    _smoothFlex += (rawFlexScore - _smoothFlex) * 0.65;
+    _smoothFlex += (rawFlexScore - _smoothFlex) * timedAlpha(0.65, dt);
 
     // 3. TỰ ĐỘNG HIỆU CHỈNH MỐC TRUNG TÍNH (Vị trí & Vector hướng nghỉ tự nhiên)
     // Chỉ lấy mẫu khi tay ĐỨNG YÊN: tay còn đang di chuyển (vừa bấm nút xong) thì bỏ mẫu, đếm lại.
@@ -753,13 +787,16 @@ class FaceMotionController extends ChangeNotifier {
     final bool calibratingNow = _isCalibrating || !_hasHandCalibratedOnce;
     if (calibratingNow) {
       _isCalibrating = true;
-      _calibAttempts++;
+      _calibElapsedSec += dt;
+      // Ngưỡng "đã nhúc nhích" giữa 2 mẫu: máy nhận diện chậm thì 2 mẫu cách xa hơn, tay rung tự nhiên
+      // cũng lệch nhiều hơn => nới ngưỡng theo căn bậc hai thời gian (không thì máy chậm khó cân bằng xong)
+      final double moveLimit = 0.025 * math.sqrt(math.max(1.0, dt / kTunedSampleDt));
       final bool moved = _calibrationFrames > 0 &&
-          ((rawX - _lastCalibX).abs() > 0.025 || (rawY - _lastCalibY).abs() > 0.025);
+          ((rawX - _lastCalibX).abs() > moveLimit || (rawY - _lastCalibY).abs() > moveLimit);
       _lastCalibX = rawX;
       _lastCalibY = rawY;
       // Sau ~2s vẫn rung thì chấp nhận luôn để không kẹt ở trạng thái hiệu chỉnh
-      if (moved && _calibAttempts < 60) {
+      if (moved && _calibElapsedSec < 2.0) {
         _clearCalibSums();
       }
       _calibHandXSum += rawX;
@@ -768,7 +805,9 @@ class FaceMotionController extends ChangeNotifier {
       _calibDirYSum += curDirY;
       _calibElevationSum += curElevation;
       _calibrationFrames++;
-      if (_calibrationFrames >= 10) {
+      _calibSampleSec += dt;
+      // 10 mẫu đứng yên (~0,33s ở 30 lần/giây); máy chậm: đứng yên đủ 0,33s & ít nhất 4 mẫu là xong
+      if (_calibrationFrames >= 10 || (_calibrationFrames >= 4 && _calibSampleSec >= 10 * kTunedSampleDt)) {
         _neutralHandX = _calibHandXSum / _calibrationFrames;
         _neutralHandY = _calibHandYSum / _calibrationFrames;
         _neutralPalmElevation = _calibElevationSum / _calibrationFrames;
@@ -784,14 +823,15 @@ class FaceMotionController extends ChangeNotifier {
         _hasHandCalibratedOnce = true;
         _calibratedHandRotation = _aiHandRotationIndex;
         _clearCalibSums();
-        _calibAttempts = 0;
+        _calibElapsedSec = 0.0;
         // Đưa mọi bộ lọc về đúng tâm để không có "đuôi" trượt sang 1 bên sau khi cân bằng
         _smoothHandX = _neutralHandX;
         _smoothHandY = _neutralHandY;
-        _smoothHandTilt = 0.0;
-        _hasSmoothHandTilt = true;
+        _handXFilter.reset(_neutralHandX);
+        _handYFilter.reset(_neutralHandY);
+        _handTiltFilter.reset(0.0);
         _currentHandTilt = 0.0;
-        _filteredHandX = 0.0;
+        _steerFilter.reset(0.0);
         _isHandSteeringActive = false;
         _savePreferences();
         notifyListeners();
@@ -813,13 +853,8 @@ class FaceMotionController extends ChangeNotifier {
     // nghiêng 20°), và không bao giờ nhảy -180° <-> +180° khi tay chúc xuống / nằm ngang.
     final double relTiltRaw = _relativeHandTiltDeg(curDirX, curDirY).clamp(-55.0, 55.0);
 
-    if (!_hasSmoothHandTilt) {
-      _smoothHandTilt = relTiltRaw;
-      _hasSmoothHandTilt = true;
-    } else {
-      _smoothHandTilt += (relTiltRaw - _smoothHandTilt) * 0.38;
-    }
-    _currentHandTilt = _smoothHandTilt * sign;
+    final double smoothHandTilt = _handTiltFilter.filter(relTiltRaw, dt);
+    _currentHandTilt = smoothHandTilt * sign;
 
     double normTilt = 0.0;
     if (_currentHandTilt.abs() > 6.0) {
@@ -830,15 +865,16 @@ class FaceMotionController extends ChangeNotifier {
     // để giữ nghiêng/lướt lâu không bị mốc "đuổi theo" làm tay tự trôi về giữa rồi lệch phía kia.
     if (!calibratingNow) {
       final double curXDiff = _smoothHandX - _neutralHandX;
-      final bool atRest = curXDiff.abs() < 0.03 && _smoothHandTilt.abs() < 5.0;
+      final bool atRest = curXDiff.abs() < 0.03 && smoothHandTilt.abs() < 5.0;
       if (atRest) {
-        _neutralHandX += curXDiff * 0.01;
+        final double drift = timedAlpha(0.01, dt);
+        _neutralHandX += curXDiff * drift;
         final double curYDiff = _smoothHandY - _neutralHandY;
         if (curYDiff.abs() < 0.05) {
-          _neutralHandY += curYDiff * 0.01;
+          _neutralHandY += curYDiff * drift;
         }
-        _neutralDirX += (curDirX - _neutralDirX) * 0.01;
-        _neutralDirY += (curDirY - _neutralDirY) * 0.01;
+        _neutralDirX += (curDirX - _neutralDirX) * drift;
+        _neutralDirY += (curDirY - _neutralDirY) * drift;
         final double nlen = math.sqrt(_neutralDirX * _neutralDirX + _neutralDirY * _neutralDirY);
         if (nlen > 0.001) {
           _neutralDirX /= nlen;
@@ -848,7 +884,7 @@ class FaceMotionController extends ChangeNotifier {
       // Tự động bù trôi mốc cổ tay thẳng khi tay đang ở trạng thái ngẩng tự nhiên (không gập)
       final double elevDiff = curElevation - _neutralPalmElevation;
       if (elevDiff.abs() < 0.05) {
-        _neutralPalmElevation += elevDiff * 0.012;
+        _neutralPalmElevation += elevDiff * timedAlpha(0.012, dt);
       }
     }
 
@@ -882,9 +918,9 @@ class FaceMotionController extends ChangeNotifier {
     // Đang cân bằng: khoá cứng ở GIỮA, không cho nhân vật chạy lung tung theo mốc cũ
     if (calibratingNow) targetHandX = 0.0;
 
-    // F. Bộ lọc chống giật tay (EMA Filter 0.35): mượt mà như vô lăng analog
-    _filteredHandX += (targetHandX - _filteredHandX) * 0.35;
-    final double finalHandX = _filteredHandX.abs() < 0.015 ? 0.0 : _filteredHandX;
+    // F. Bộ lọc chống giật tay (One Euro, lúc đứng yên = EMA 0.35 cũ): mượt mà như vô lăng analog
+    final double filteredHandX = _steerFilter.filter(targetHandX, dt);
+    final double finalHandX = filteredHandX.abs() < 0.015 ? 0.0 : filteredHandX;
 
     final double targetHandY = calibratingNow ? 0.0 : ((_smoothHandY - _neutralHandY) * 2.2).clamp(-1.0, 1.0);
 
@@ -907,27 +943,30 @@ class FaceMotionController extends ChangeNotifier {
     _currentHandSpan = curlRatio * 100.0;
     // xòe ~1.8-2.1 -> 0 ; nắm ~0.8-1.1 -> 1
     final double rawFist = ((1.62 - curlRatio) / (1.62 - 1.05)).clamp(0.0, 1.0);
-    _smoothedFistScore += (rawFist - _smoothedFistScore) * 0.5;
+    _smoothedFistScore += (rawFist - _smoothedFistScore) * timedAlpha(0.5, dt);
 
+    // Chống rung: điều kiện phải giữ >= 50ms (= 2 khung liên tiếp ở 30 lần/giây). Mỗi mẫu tính bằng
+    // khoảng thời gian nó đại diện => máy chậm (1 mẫu ~80ms) nắm tay là ăn ngay, không phải chờ thêm 1 mẫu.
+    const double fistHoldSec = 0.05;
     final double activateThresh = _fistThreshold;
     final double releaseThresh = _fistThreshold * 0.68;
     if (!_isHandFistState) {
       if (_smoothedFistScore >= activateThresh) {
-        _fistActivateDebounce++;
-        if (_fistActivateDebounce >= 2) _isHandFistState = true;
+        _fistActivateHeld += dt;
+        if (_fistActivateHeld >= fistHoldSec) _isHandFistState = true;
       } else {
-        _fistActivateDebounce = 0;
+        _fistActivateHeld = 0.0;
       }
     } else {
       if (_smoothedFistScore <= releaseThresh) {
-        _fistReleaseDebounce++;
-        if (_fistReleaseDebounce >= 2) {
+        _fistReleaseHeld += dt;
+        if (_fistReleaseHeld >= fistHoldSec) {
           _isHandFistState = false;
-          _fistActivateDebounce = 0;
-          _fistReleaseDebounce = 0;
+          _fistActivateHeld = 0.0;
+          _fistReleaseHeld = 0.0;
         }
       } else {
-        _fistReleaseDebounce = 0;
+        _fistReleaseHeld = 0.0;
       }
     }
     final bool isFist = _isHandFistState;
@@ -984,8 +1023,8 @@ class FaceMotionController extends ChangeNotifier {
       final double rightCx = aIsLeft ? cxB : cxA;
       final double rightCy = aIsLeft ? cyB : cyA;
 
-      leftHandData = _extractHandData(sLmLeft, leftCx, leftCy, w, h, isLeft: true);
-      rightHandData = _extractHandData(sLmRight, rightCx, rightCy, w, h, isLeft: false);
+      leftHandData = _extractHandData(sLmLeft, leftCx, leftCy, w, h, dt, isLeft: true);
+      rightHandData = _extractHandData(sLmRight, rightCx, rightCy, w, h, dt, isLeft: false);
 
       final double dx = (rightCx - leftCx);
       final double dy = (rightCy - leftCy);
@@ -1001,13 +1040,13 @@ class FaceMotionController extends ChangeNotifier {
       }
     } else {
       if (screenCx < 0.5) {
-        leftHandData = _extractHandData(screenLm, screenCx, screenCy, w, h, isLeft: true);
+        leftHandData = _extractHandData(screenLm, screenCx, screenCy, w, h, dt, isLeft: true);
         rightHandData = HandData.initial;
-        _hasSmoothRight = false;
+        _resetDualHandFilters(right: true);
       } else {
-        rightHandData = _extractHandData(screenLm, screenCx, screenCy, w, h, isLeft: false);
+        rightHandData = _extractHandData(screenLm, screenCx, screenCy, w, h, dt, isLeft: false);
         leftHandData = HandData.initial;
-        _hasSmoothLeft = false;
+        _resetDualHandFilters(left: true);
       }
       _isClapArmed = false;
     }
@@ -1051,7 +1090,8 @@ class FaceMotionController extends ChangeNotifier {
     double screenCx,
     double screenCy,
     double w,
-    double h, {
+    double h,
+    double dt, {
     required bool isLeft,
   }) {
     double dist(int a, int b) {
@@ -1077,38 +1117,20 @@ class FaceMotionController extends ChangeNotifier {
     final double curlRatio = ratioCount > 0 ? ratioSum / ratioCount : 2.0;
     final double rawFist = ((1.62 - curlRatio) / (1.62 - 1.05)).clamp(0.0, 1.0);
 
-    double smoothX = screenCx - 0.5;
-    double smoothY = screenCy - 0.5;
-    double fistScore = rawFist;
+    final OneEuroFilter xFilter = isLeft ? _leftXFilter : _rightXFilter;
+    final OneEuroFilter yFilter = isLeft ? _leftYFilter : _rightYFilter;
+    final bool fresh = !xFilter.hasValue; // tay này vừa xuất hiện lại: dùng luôn giá trị thật
+    final double smoothX = xFilter.filter(screenCx - 0.5, dt);
+    final double smoothY = yFilter.filter(screenCy - 0.5, dt);
+    final double fistAlpha = fresh ? 1.0 : timedAlpha(0.5, dt);
+    final double fistScore;
 
     if (isLeft) {
-      if (!_hasSmoothLeft) {
-        _smoothLeftX = smoothX;
-        _smoothLeftY = smoothY;
-        _smoothLeftFist = rawFist;
-        _hasSmoothLeft = true;
-      } else {
-        _smoothLeftX += (smoothX - _smoothLeftX) * 0.45;
-        _smoothLeftY += (smoothY - _smoothLeftY) * 0.45;
-        _smoothLeftFist += (rawFist - _smoothLeftFist) * 0.5;
-      }
-      smoothX = _smoothLeftX;
-      smoothY = _smoothLeftY;
+      _smoothLeftFist += (rawFist - _smoothLeftFist) * fistAlpha;
       fistScore = _smoothLeftFist;
       _isLeftFist = fistScore >= _fistThreshold;
     } else {
-      if (!_hasSmoothRight) {
-        _smoothRightX = smoothX;
-        _smoothRightY = smoothY;
-        _smoothRightFist = rawFist;
-        _hasSmoothRight = true;
-      } else {
-        _smoothRightX += (smoothX - _smoothRightX) * 0.45;
-        _smoothRightY += (smoothY - _smoothRightY) * 0.45;
-        _smoothRightFist += (rawFist - _smoothRightFist) * 0.5;
-      }
-      smoothX = _smoothRightX;
-      smoothY = _smoothRightY;
+      _smoothRightFist += (rawFist - _smoothRightFist) * fistAlpha;
       fistScore = _smoothRightFist;
       _isRightFist = fistScore >= _fistThreshold;
     }
@@ -1137,6 +1159,18 @@ class FaceMotionController extends ChangeNotifier {
     return math.atan2(cross, dot) * 180.0 / math.pi;
   }
 
+  /// Quên vị trí đã lọc của tay trái / phải (tay đó vừa mất): lần thấy lại dùng luôn vị trí thật
+  void _resetDualHandFilters({bool left = false, bool right = false}) {
+    if (left) {
+      _leftXFilter.reset();
+      _leftYFilter.reset();
+    }
+    if (right) {
+      _rightXFilter.reset();
+      _rightYFilter.reset();
+    }
+  }
+
   void _clearCalibSums() {
     _calibHandXSum = 0.0;
     _calibHandYSum = 0.0;
@@ -1144,16 +1178,17 @@ class FaceMotionController extends ChangeNotifier {
     _calibDirYSum = 0.0;
     _calibElevationSum = 0.0;
     _calibrationFrames = 0;
+    _calibSampleSec = 0.0;
   }
 
   void _resetHandCalibration() {
     _isCalibrating = true;
     _hasHandCalibratedOnce = false;
-    _calibAttempts = 0;
+    _calibElapsedSec = 0.0;
     _clearCalibSums();
     _hasSmoothFlex = false;
-    _hasSmoothHandTilt = false;
-    _filteredHandX = 0.0;
+    _handTiltFilter.reset();
+    _steerFilter.reset(0.0);
     _currentHandTilt = 0.0;
     _isHandSteeringActive = false;
   }
@@ -1165,6 +1200,7 @@ class FaceMotionController extends ChangeNotifier {
     }
     _isCalibrating = true;
     _calibrationFrames = 0;
+    _calibSampleSec = 0.0;
     if (_inputMode == MotionInputMode.hand) {
       _resetHandCalibration();
     } else {
