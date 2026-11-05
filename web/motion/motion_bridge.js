@@ -288,63 +288,12 @@ function showEmbedCameraHint() {
   document.body.appendChild(box);
 }
 
-/**
- * Điện thoại / tablet chưa từng cấp quyền camera: chờ bé chạm màn hình rồi mới xin quyền.
- * Xin ngay lúc trang đang tải thì hộp thoại của Chrome Android hay bị cửa sổ khác đè lên
- * (toast, popup của máy, đồng hồ tốc độ mạng nổi...) => bấm "Cho phép" bị chặn:
- * "Trang web này không thể yêu cầu bạn cấp quyền. Đóng mọi cửa sổ chú giải hoặc lớp phủ...".
- * Xin sau một lần chạm cũng là cách trình duyệt khuyên dùng. Laptop / PC (chuột) giữ như cũ.
- */
-let tapWait = null;
-async function waitForTapIfNeeded() {
-  if (!window.matchMedia?.('(pointer: coarse)').matches) return;
-  if (navigator.userActivation?.isActive) return; // đang trong một lần chạm: xin luôn
-  try {
-    const policy = document.permissionsPolicy || document.featurePolicy;
-    if (policy && !policy.allowsFeature('camera')) return; // trang nhúng chặn camera: hỏi cũng vô ích
-  } catch (_) {}
-  let state = 'prompt';
-  try {
-    state = (await navigator.permissions.query({ name: 'camera' })).state;
-  } catch (_) {} // trình duyệt không hỗ trợ hỏi trạng thái quyền camera: coi như chưa cấp
-  if (state !== 'prompt') return; // đã cho phép (vào lại) / đã chặn (hỏi cũng không hiện)
-
-  tapWait ??= new Promise((resolve) => {
-    const box = document.createElement('div');
-    box.setAttribute('role', 'status');
-    box.textContent = '📷 Chạm vào màn hình để bật camera';
-    Object.assign(box.style, {
-      position: 'fixed', left: '50%', top: 'max(6px, env(safe-area-inset-top))', transform: 'translateX(-50%)',
-      zIndex: '2147483647', maxWidth: 'min(calc(100vw - 16px), 520px)', boxSizing: 'border-box',
-      padding: '7px 16px', borderRadius: '18px', background: 'rgba(7, 8, 48, 0.88)', color: '#fff',
-      font: '600 clamp(12px, 2vmin, 15px)/1.3 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
-      boxShadow: '0 4px 16px rgba(0,0,0,0.35)', pointerEvents: 'none', whiteSpace: 'nowrap',
-      overflow: 'hidden', textOverflow: 'ellipsis',
-    });
-    const show = () => document.body.appendChild(box);
-    if (document.body) show();
-    else document.addEventListener('DOMContentLoaded', show, { once: true });
-
-    const events = ['pointerup', 'touchend', 'keydown'];
-    const done = () => {
-      for (const type of events) window.removeEventListener(type, done, true);
-      box.remove();
-      tapWait = null;
-      resolve();
-    };
-    // capture: nhận được cả khi Flutter chặn sự kiện; lần chạm vẫn tới Flutter (VD: bấm PLAY)
-    for (const type of events) window.addEventListener(type, done, true);
-  });
-  await tapWait;
-}
-
 async function start(options = {}) {
   if (running) return { width: video.videoWidth, height: video.videoHeight };
   mode = options.mode || mode;
   if (!navigator.mediaDevices?.getUserMedia) {
     throw new Error('Camera API not available (page must be served over HTTPS)');
   }
-  await waitForTapIfNeeded();
 
   const source = options.deviceId ? { deviceId: { exact: options.deviceId } } : { facingMode: 'user' };
   try {
