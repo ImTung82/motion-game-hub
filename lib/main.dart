@@ -39,7 +39,7 @@ class MotionArcadeHubApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Enspire Digital',
+      title: 'Enspire Arcade',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
