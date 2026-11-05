@@ -1,6 +1,7 @@
 {
   "hosting": {
     "public": "build/web",
+    "predeploy": ["node tool/stamp_web_version.mjs"],
     "ignore": ["firebase.json", "**/.*"],
     "redirects": [{ "source": "/embed", "destination": "/embed.html", "type": 301 }],
     "headers": [

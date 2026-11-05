@@ -99,8 +99,12 @@
     })();
   </script>
 
-  <!-- Camera + MediaPipe cho bản web (window.motionBridge) -->
-  <script type="module" src="motion/motion_bridge.js"></script>
+  <!--
+    Camera + MediaPipe cho bản web (window.motionBridge).
+    ?v= được tool/stamp_web_version.mjs thay bằng mã băm khi deploy => JS luôn khớp bản Dart mới,
+    điện thoại không giữ bản cũ trong bộ nhớ đệm.
+  -->
+  <script type="module" src="motion/motion_bridge.js?v=__MOTION_VERSION__"></script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

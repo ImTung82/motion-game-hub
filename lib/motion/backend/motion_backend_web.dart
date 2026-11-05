@@ -61,7 +61,17 @@ class WebMotionBackend extends MotionBackend {
   @override
   set maxHands(int value) {
     super.maxHands = value;
-    _bridge?.setMaxHands(value);
+    final bridge = _bridge;
+    if (bridge != null) _setMaxHands(bridge, value);
+  }
+
+  /// JS cũ (bộ nhớ đệm trước khi có setMaxHands) không được làm hỏng cả camera: chỉ mất tuỳ chỉnh số tay
+  static void _setMaxHands(_MotionBridge bridge, int value) {
+    try {
+      bridge.setMaxHands(value);
+    } catch (e) {
+      debugPrint('motionBridge.setMaxHands failed: $e');
+    }
   }
 
   static String _modeName(MotionInputMode mode) => mode == MotionInputMode.hand ? 'hand' : 'face';
@@ -71,7 +81,7 @@ class WebMotionBackend extends MotionBackend {
     final bridge = await _waitForBridge();
     bridge.onHands = _handleHands.toJS;
     bridge.onFace = _handleFace.toJS;
-    bridge.setMaxHands(maxHands);
+    _setMaxHands(bridge, maxHands);
 
     final result = await bridge.start(_StartOptions(mode: _modeName(mode))).toDart;
     _bridge = bridge;
