@@ -21,7 +21,8 @@ class FaceMotionController extends ChangeNotifier {
   bool _cameraAvailable = false;
   String _statusMessage = 'Starting camera...';
 
-  MotionInputMode _inputMode = MotionInputMode.face;
+  // Mặc định chơi bằng 1 tay; chỉ dùng mặt khi người chơi đã tự chọn FACE (lưu trong prefs)
+  MotionInputMode _inputMode = MotionInputMode.hand;
   MotionInputMode get inputMode => _inputMode;
   set inputMode(MotionInputMode mode) {
     if (_inputMode == mode) return;
@@ -1275,11 +1276,7 @@ class FaceMotionController extends ChangeNotifier {
     _neutralDirX = prefs.getDouble('neutral_dir_x') ?? 0.0;
     _neutralDirY = prefs.getDouble('neutral_dir_y') ?? -1.0;
     final savedMode = prefs.getString('motion_input_mode');
-    if (savedMode == 'hand') {
-      _inputMode = MotionInputMode.hand;
-    } else {
-      _inputMode = MotionInputMode.face;
-    }
+    _inputMode = savedMode == 'face' ? MotionInputMode.face : MotionInputMode.hand;
     _tiltThreshold = prefs.getDouble('tilt_threshold') ?? MotionDefaults.defaultTiltThreshold;
     _handDeadzone = prefs.getDouble('hand_deadzone') ?? 0.18;
     _handSensitivity = prefs.getDouble('hand_sensitivity') ?? 2.4;
