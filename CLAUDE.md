@@ -7,9 +7,14 @@ Chạy trên Android (ML Kit + MediaPipe native) và Web (MediaPipe JS trong `we
 
 - **Hiệu năng / FPS:** đừng mất thời gian đo FPS chi tiết. Kết quả phụ thuộc camera, phần cứng, máy đang chạy gì...
   Chỉ cần áp dụng best practice để mọi loại thiết bị (laptop, PC, Android TV, điện thoại, tablet) đều chạy ổn.
-- **Deploy:** không dùng CI/CD. Mỗi khi code xong một việc thì tự làm luôn cả 2 bước, không cần hỏi:
-  1. commit + push lên GitHub (nhánh đang làm);
-  2. `flutter build web --wasm` rồi `firebase deploy --only hosting` (đã đăng nhập sẵn, project trong `.firebaserc`).
+- **Chạy thử rồi mới deploy:** không dùng CI/CD. Mỗi khi code xong một việc:
+  1. Tự chạy localhost cho người dùng xem thử: `flutter build web --wasm` rồi `node tool/serve_web.mjs`
+     (chạy nền, mở http://localhost:8080, gửi đủ header COOP/COEP như `firebase.json`; Firebase emulator
+     không gửi các header này nên không dùng). Gửi link và báo cần xem gì.
+  2. **Chờ người dùng xác nhận.** Chưa xác nhận thì KHÔNG commit, push hay deploy.
+  3. Người dùng xác nhận xong mới làm, không cần hỏi lại: commit + push lên GitHub (nhánh đang làm), rồi
+     `firebase deploy --only hosting` (dùng bản `build/web` vừa thử; project trong `.firebaserc`).
+     Báo lỗi đăng nhập thì nhờ người dùng chạy `firebase login`.
 - **Chỉ sửa game có trong hub:** game không hiện ở màn hub thì không sửa. Hiện các hub chỉ mở:
   Fruits Kick (`penalty_kick`), Egg Smasher (`egg_smasher`), Goalkeeper Hero (`goalkeeper_hero`).
   `flappy_mouth`, `sky_chomp` không được dùng.
