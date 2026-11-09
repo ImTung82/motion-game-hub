@@ -44,6 +44,7 @@ class WordBank {
   Future<void> load() => _ready ??= _load();
 
   Future<void> _load() async {
+    var list = <WordEntry>[];
     try {
       final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
       final assets = manifest.listAssets().where((a) => a.startsWith('assets/words/')).toList();
@@ -53,30 +54,37 @@ class WordBank {
         final ext = _imageExts.where(lower.endsWith).firstOrNull;
         if (ext != null) images.add(lower.substring('assets/words/'.length, lower.length - ext.length));
       }
-      final list = <WordEntry>[];
       for (final a in assets) {
         if (!a.endsWith('.mp3')) continue;
         final id = a.substring('assets/words/'.length, a.length - '.mp3'.length).toLowerCase(); // 'fruits/orange'
-        final slash = id.lastIndexOf('/');
-        if (slash < 0) continue;
-        final emoji = _emoji[id];
-        if (emoji == null && !images.contains(id)) {
+        if (!id.contains('/')) continue;
+        if (_emoji[id] == null && !images.contains(id)) {
           debugPrint('WordBank: bỏ qua "$id" (chưa có ảnh, chưa có emoji)');
           continue;
         }
-        list.add(WordEntry(
-          group: id.substring(0, slash),
-          word: id.substring(slash + 1),
-          emoji: emoji ?? '⭐',
-          color: _colorWords[id] ?? _palette[id.hashCode.abs() % _palette.length],
-        ));
+        list.add(_entry(id));
       }
-      list.sort((a, b) => a.id.compareTo(b.id));
-      _words = List.unmodifiable(list);
     } catch (e) {
-      _ready = null; // lỗi thì lần sau thử lại
       debugPrint('WordBank load error: $e');
     }
+    // Danh mục asset lỗi / cũ (trình duyệt giữ AssetManifest của bản build trước, khi file đọc chưa chia nhóm)
+    // => dùng bảng emoji làm kho dự phòng, game vẫn chạy thay vì màn xám "Bad state: No element".
+    if (list.isEmpty) {
+      debugPrint('WordBank: không đọc được từ nào trong AssetManifest, dùng bảng emoji dự phòng');
+      list = [for (final id in _emoji.keys) _entry(id)];
+    }
+    list.sort((a, b) => a.id.compareTo(b.id));
+    _words = List.unmodifiable(list);
+  }
+
+  static WordEntry _entry(String id) {
+    final slash = id.lastIndexOf('/');
+    return WordEntry(
+      group: id.substring(0, slash),
+      word: id.substring(slash + 1),
+      emoji: _emoji[id] ?? '⭐',
+      color: _colorWords[id] ?? _palette[id.hashCode.abs() % _palette.length],
+    );
   }
 
   /// Bộ từ đã xáo cho 1 lượt chơi, mỗi chữ chỉ 1 lần (VD không có 2 ô 'ORANGE' cùng lúc).
@@ -104,7 +112,8 @@ class WordBank {
     Color(0xFF29B6F6), Color(0xFF1E88E5), Color(0xFF7E57C2), Color(0xFFEC407A), Color(0xFF8D6E63),
   ];
 
-  /// Emoji thay thế khi chưa có ảnh. Từ mới đã có ảnh thì không cần thêm vào đây.
+  /// Emoji thay thế khi chưa có ảnh, đồng thời là kho dự phòng khi không đọc được AssetManifest => giữ bảng này.
+  /// Từ mới đã có ảnh thì không bắt buộc thêm vào đây.
   static const Map<String, String> _emoji = {
     'actions/hug': '🤗', 'actions/run': '🏃',
     'animals/bat': '🦇', 'animals/bug': '🐛', 'animals/cat': '🐱', 'animals/dog': '🐶', 'animals/fox': '🦊',
@@ -124,6 +133,7 @@ class WordBank {
     'things/bed': '🛏️', 'things/bin': '🗑️', 'things/box': '📦', 'things/bun': '🥯', 'things/cab': '🚕',
     'things/can': '🥫', 'things/cap': '🧢', 'things/hat': '🎩', 'things/map': '🗺️', 'things/mat': '🧶',
     'things/mug': '☕', 'things/net': '🥅', 'things/pan': '🍳', 'things/pen': '🖊️', 'things/pin': '📌',
-    'things/pot': '🍲', 'things/tub': '🛁', 'things/van': '🚐'
+    'things/pot': '🍲', 'things/tub': '🛁', 'things/van': '🚐',
+    'nature/moon': '🌙', 'numbers/zero': '0️⃣'
   };
 }

@@ -39,10 +39,7 @@ class GoalkeeperEngine extends ChangeNotifier {
   int maxStreak = 0;
   int highScore = 0;
   bool isNewHighScore = false;
-  int ballsSaved = 0;
-  int ballsCaught = 0;
   int ballsMissed = 0;
-  final List<WordEntry> savedWords = []; // Bộ sưu tập từ bé đã cản được trong ván
 
   // Chờ tay & đếm ngược
   // Bước chuẩn bị (cùng luật với ReadyGate của các game khác): phải thấy ĐỦ 2 tay mới bắt đầu, không tự
@@ -153,13 +150,10 @@ class GoalkeeperEngine extends ChangeNotifier {
   void startGame() {
     balls.clear();
     particles.clear();
-    savedWords.clear();
     score = 0;
     lives = maxLives;
     streak = 0;
     maxStreak = 0;
-    ballsSaved = 0;
-    ballsCaught = 0;
     ballsMissed = 0;
     isNewHighScore = false;
     isPaused = false;
@@ -486,12 +480,9 @@ class GoalkeeperEngine extends ChangeNotifier {
       leftGlove.impactAnim = 1.0;
       rightGlove.impactAnim = 1.0;
 
-      ballsSaved++;
-      ballsCaught++;
       _addStreak();
       const int stars = 2;
       score += stars;
-      _collectWord(ball.wordItem);
 
       // Ăn mừng thật lớn: sao, pháo giấy, rung màn hình, khán giả nhảy lên
       _spawnCatchParticles(ball.currentX, ball.currentY, ball.wordItem.color);
@@ -522,11 +513,9 @@ class GoalkeeperEngine extends ChangeNotifier {
       ball.bounceVy = -0.9 - _random.nextDouble() * 0.4;
       ball.bounceVz = -1.2;
 
-      ballsSaved++;
       _addStreak();
       const int stars = 1;
       score += stars;
-      _collectWord(ball.wordItem);
 
       // Sinh tia lửa cản phá
       _spawnBlockParticles(ball.currentX, ball.currentY, hitLeft ? const Color(0xFF00E5FF) : const Color(0xFFFF4081));
@@ -547,10 +536,6 @@ class GoalkeeperEngine extends ChangeNotifier {
   void _addStreak() {
     streak++;
     if (streak > maxStreak) maxStreak = streak;
-  }
-
-  void _collectWord(WordEntry word) {
-    if (!savedWords.any((w) => w.word == word.word)) savedWords.add(word);
   }
 
   void _handleGoalConceded(GoalBall ball) {

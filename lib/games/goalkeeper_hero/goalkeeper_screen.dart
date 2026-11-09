@@ -14,7 +14,6 @@ import '../../ui/widgets/rabbit_mascot.dart';
 import '../../ui/widgets/ready_gate.dart';
 import '../../ui/widgets/score_fly_layer.dart';
 import '../../ui/widgets/touch_hint.dart';
-import '../../ui/widgets/word_picture.dart';
 import 'goalkeeper_canvas.dart';
 import 'goalkeeper_engine.dart';
 import 'goalkeeper_models.dart';
@@ -38,17 +37,11 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
   final GlobalKey _scoreKey = GlobalKey();
   int _shownScore = 0;
 
-  // Banner từ vựng vừa cản phá thành công
-  WordEntry? _latestWord;
-  bool _isSuperCatch = false;
-  double _wordBannerTimer = 0.0;
-
   // Thỏ nói "Oops!" một lúc sau khi lọt lưới
   double _oopsTimer = 0.0;
 
   // Mốc số sao để nhận 1 / 2 / 3 cúp cuối ván
   static const List<int> _cupThresholds = [3, 10, 20];
-  static const int _maxWordTiles = 10;
 
   // Ảnh quả bóng nạp sẵn
   static const _ballAsset = ResizeImage(AssetImage('assets/images/soccer_ball.png'), width: 192, height: 192);
@@ -88,13 +81,6 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
     _lastTick = elapsed;
     final clampedDt = dt.clamp(0.001, 0.05);
 
-    if (_wordBannerTimer > 0) {
-      _wordBannerTimer -= clampedDt;
-      if (_wordBannerTimer <= 0) {
-        setState(() => _latestWord = null);
-      }
-    }
-
     if (_oopsTimer > 0) {
       _oopsTimer -= clampedDt;
       if (_oopsTimer <= 0) setState(() {});
@@ -124,7 +110,6 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
     SoundService.instance.playClick();
     setState(() {
       _shownScore = 0;
-      _latestWord = null;
       _oopsTimer = 0.0;
       _touchUsed = false;
       _engine.startGame();
@@ -132,12 +117,7 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
   }
 
   void _onBallSaved(SaveEvent event) {
-    setState(() {
-      _latestWord = event.word;
-      _isSuperCatch = event.isSuperCatch;
-      _wordBannerTimer = 1.8;
-      _oopsTimer = 0.0;
-    });
+    if (_oopsTimer > 0) setState(() => _oopsTimer = 0.0);
 
     // Thả sao bay tới HUD
     _flyLayerKey.currentState?.spawn(
@@ -246,17 +226,6 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
               ),
             ),
 
-            // 3. BANNER TỪ VỰNG TIẾNG ANH VỪA BẮT ĐƯỢC (TOP CENTER)
-            if (_latestWord != null)
-              Positioned(
-                top: pad.top + 60 * s,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: _buildWordCelebrationBanner(s),
-                ),
-              ),
-
             // 4. CHỜ GIƠ 2 TAY / ĐẾM NGƯỢC 3-2-1 / LỜI NHẮC KHI MẤT TAY
             Positioned.fill(
               child: IgnorePointer(
@@ -361,9 +330,6 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
                 _engine.score,
                 _engine.highScore,
                 _engine.isNewHighScore,
-                _engine.ballsSaved,
-                _engine.ballsCaught,
-                _engine.savedWords.length,
               ),
               builder: (context, _) {
                 if (!_engine.isGameOver) return const SizedBox.shrink();
@@ -641,7 +607,6 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
   Widget _buildGameOverDialog(double s) {
     final isRecord = _engine.isNewHighScore;
     final cups = _cupThresholds.where((t) => _engine.score >= t).length;
-    final words = _engine.savedWords;
 
     return KidDialog(
       mascot: RabbitMascot.images[isRecord || cups >= 2 ? RabbitMood.happy : RabbitMood.normal],
@@ -680,43 +645,11 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
               ),
           ],
         ),
-        SizedBox(height: 12 * s),
-        Wrap(
-          alignment: WrapAlignment.center,
-          spacing: 8 * s,
-          runSpacing: 6 * s,
-          children: [
-            _buildStatChip('🧤', '${_engine.ballsSaved} saves', KidColors.green, s),
-            _buildStatChip('👐', '${_engine.ballsCaught} catches', KidColors.blue, s),
-            _buildStatChip('🏆', 'Best ${_engine.highScore}', KidColors.orange, s),
-          ],
-        ),
-        if (words.isNotEmpty) ...[
-          SizedBox(height: 12 * s),
-          _sectionLabel('TAP TO LISTEN 🔊', s),
-          SizedBox(height: 6 * s),
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 6 * s,
-            runSpacing: 6 * s,
-            children: [
-              for (final w in words.take(_maxWordTiles)) _buildWordTile(w, s),
-              if (words.length > _maxWordTiles)
-                Padding(
-                  padding: EdgeInsets.only(top: 14 * s),
-                  child: Text(
-                    '+${words.length - _maxWordTiles}',
-                    style: TextStyle(color: KidColors.textSoft, fontSize: 14 * s, fontWeight: FontWeight.w900),
-                  ),
-                ),
-            ],
-          ),
-        ],
         SizedBox(height: 18 * s),
         _buildActionRow(
           s: s,
           primaryIcon: Icons.replay_rounded,
-          primaryLabel: 'PLAY AGAIN',
+          primaryLabel: 'PLAY', // 3 nút cùng hàng: chữ ngắn để không bị thu nhỏ
           onPrimary: _startGame,
           showHome: true,
           onSettings: () {
@@ -726,38 +659,6 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
           },
         ),
       ],
-    );
-  }
-
-  /// Thẻ từ vựng trong bộ sưu tập: chạm để nghe lại
-  Widget _buildWordTile(WordEntry word, double s) {
-    return GestureDetector(
-      onTap: () => SoundService.instance.playWord(word.word),
-      child: Container(
-        width: 52 * s,
-        padding: EdgeInsets.symmetric(vertical: 4 * s),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12 * s),
-          border: Border.all(color: word.color, width: 2.5 * s),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            WordPicture(word: word.id, fallbackEmoji: word.emoji, size: 30 * s),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: 3 * s),
-                child: Text(
-                  word.label,
-                  style: TextStyle(color: KidColors.text, fontSize: 9 * s, fontWeight: FontWeight.w900),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -892,61 +793,6 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
     );
   }
 
-  Widget _buildWordCelebrationBanner(double s) {
-    final word = _latestWord!;
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 20 * s, vertical: 10 * s),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: _isSuperCatch
-              ? [const Color(0xFFFFD54F), const Color(0xFFFF8F00)]
-              : [const Color(0xFF00E5FF), const Color(0xFF0091EA)],
-        ),
-        borderRadius: BorderRadius.circular(24 * s),
-        border: Border.all(color: Colors.white, width: 2.5 * s),
-        boxShadow: const [
-          BoxShadow(color: Color(0x66000000), blurRadius: 12, offset: Offset(0, 4)),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(word.emoji, style: TextStyle(fontSize: 40 * s)),
-          SizedBox(width: 10 * s),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _isSuperCatch ? '👐 SUPER CATCH!' : '🧤 GREAT SAVE!',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 11 * s,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.8,
-                ),
-              ),
-              Text(
-                word.label,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 22 * s,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.2,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(width: 8 * s),
-          IconButton(
-            icon: Icon(Icons.volume_up_rounded, color: Colors.white, size: 24 * s),
-            onPressed: () => SoundService.instance.playWord(word.word),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildMascot(double s) {
     final bool touch = widget.motionController.touchMode;
     RabbitMood mood = RabbitMood.normal;
@@ -1044,21 +890,6 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildStatChip(String emoji, String label, Color color, double s) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 12 * s, vertical: 6 * s),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(16 * s),
-        border: Border.all(color: color, width: 2 * s),
-      ),
-      child: Text(
-        '$emoji $label',
-        style: TextStyle(color: KidColors.text, fontSize: 13 * s, fontWeight: FontWeight.w800),
-      ),
     );
   }
 }
