@@ -128,7 +128,7 @@ class WordItem {
     WordItem(word: 'banana', label: 'BANANA', emoji: '🍌', color: Color(0xFFFFD600)),
     WordItem(word: 'cherry', label: 'CHERRY', emoji: '🍒', color: Color(0xFFD50000)),
     WordItem(word: 'coconut', label: 'COCONUT', emoji: '🥥', color: Color(0xFF8D6E63)),
-    WordItem(word: 'grape', label: 'GRAPE', emoji: '🍇', color: Color(0xFFAB47BC)),
+    WordItem(word: 'grapes', label: 'GRAPES', emoji: '🍇', color: Color(0xFFAB47BC)),
     WordItem(word: 'kiwi', label: 'KIWI', emoji: '🥝', color: Color(0xFF7CB342)),
     WordItem(word: 'lemon', label: 'LEMON', emoji: '🍋', color: Color(0xFFFFEE58)),
     WordItem(word: 'mango', label: 'MANGO', emoji: '🥭', color: Color(0xFFFFA000)),
@@ -170,12 +170,14 @@ class WordItem {
     WordItem(word: 'tub', label: 'TUB', emoji: '🛁', color: Color(0xFF29B6F6)),
   ];
 
-  /// Từ lẻ (màu, số, động từ) chỉ xuất hiện ở chủ đề MIXED
+  /// Từ lẻ (màu, số, động từ, tính từ)
   static const List<WordItem> extras = [
     WordItem(word: 'red', label: 'RED', emoji: '🔴', color: Color(0xFFFF1744)),
     WordItem(word: 'six', label: 'SIX', emoji: '6️⃣', color: Color(0xFF00E676)),
     WordItem(word: 'ten', label: 'TEN', emoji: '🔟', color: Color(0xFF00B0FF)),
     WordItem(word: 'run', label: 'RUN', emoji: '🏃', color: Color(0xFF2979FF)),
+    WordItem(word: 'cold', label: 'COLD', emoji: '🥶', color: Color(0xFF29B6F6)),
+    WordItem(word: 'small', label: 'SMALL', emoji: '🐜', color: Color(0xFF8D6E63)),
   ];
 }
 

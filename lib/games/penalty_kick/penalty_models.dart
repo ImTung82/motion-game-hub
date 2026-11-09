@@ -108,7 +108,7 @@ const List<FruitItem> kAllFruits = [
   FruitItem(name: 'Banana', emoji: '🍌', colorValue: 0xFFFFD600),
   FruitItem(name: 'Orange', emoji: '🍊', colorValue: 0xFFFF7A00),
   FruitItem(name: 'Watermelon', emoji: '🍉', colorValue: 0xFF00E676),
-  FruitItem(name: 'Grape', emoji: '🍇', colorValue: 0xFFAA00FF),
+  FruitItem(name: 'Grapes', emoji: '🍇', colorValue: 0xFFAA00FF),
   FruitItem(name: 'Strawberry', emoji: '🍓', colorValue: 0xFFFF1744),
   FruitItem(name: 'Pineapple', emoji: '🍍', colorValue: 0xFFFFAB00),
   FruitItem(name: 'Mango', emoji: '🥭', colorValue: 0xFFFF9100),
