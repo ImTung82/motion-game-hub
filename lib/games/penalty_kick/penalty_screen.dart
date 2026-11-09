@@ -476,9 +476,9 @@ class _PenaltyScreenState extends State<PenaltyScreen> with SingleTickerProvider
       bottom: pad.bottom + 8 * s + _logoH * s + 2,
       child: ListenableSelector(
         listenable: _engine,
-        selector: () => (_engine.currentTargetFruit, _engine.currentOutcome),
+        selector: () => (_engine.currentTargetWord, _engine.currentOutcome),
         builder: (context, _) {
-          final target = _engine.currentTargetFruit;
+          final target = _engine.currentTargetWord;
           if (target == null) return const SizedBox.shrink();
 
           return switch (_engine.currentOutcome) {
@@ -500,7 +500,7 @@ class _PenaltyScreenState extends State<PenaltyScreen> with SingleTickerProvider
             _ => RabbitMascot(
                 mood: RabbitMood.normal,
                 caption: 'Kick the ball to the',
-                headline: target.name,
+                headline: target.title,
                 rabbitHeight: rabbitH,
                 bubbleMaxWidth: bubbleMaxW,
                 textScale: s,

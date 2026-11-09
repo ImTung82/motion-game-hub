@@ -19,13 +19,15 @@ class WordImages {
   /// Cạnh dài sau khi thu nhỏ: đủ nét cho huy hiệu to nhất trên màn TV, không tốn bộ nhớ (~256 KB / ảnh)
   static const int _decodeSize = 256;
 
-  final Map<String, String> _paths = {}; // 'bat' -> 'assets/words/animals/bat.png'
+  // 'animals/bat' -> 'assets/words/animals/bat.png' (+ khoá phụ 'bat' khi tên không trùng nhóm khác)
+  final Map<String, String> _paths = {};
   final Map<String, ui.Image> _images = {};
   Future<void>? _ready;
 
   /// Gọi 1 lần lúc mở app; gọi lại cũng không sao.
   Future<void> preload() => _ready ??= _load();
 
+  /// Tra theo `WordEntry.id` ('fruits/orange'); tên trần ('orange') cũng được nhưng trùng tên thì lấy nhóm đầu tiên.
   /// Đường dẫn asset của ảnh (cho widget `Image.asset`), null nếu từ chưa có ảnh.
   String? assetPath(String word) => _paths[_key(word)];
 
@@ -58,17 +60,27 @@ class WordImages {
         final lower = asset.toLowerCase();
         final ext = _extensions.where(lower.endsWith).firstOrNull;
         if (ext == null) continue;
-        final name = asset.substring(asset.lastIndexOf('/') + 1, asset.length - ext.length);
-        _paths[_key(name)] = asset;
+        final id = _key(asset.substring('assets/words/'.length, asset.length - ext.length)); // 'animals/bat'
+        _paths[id] = asset;
+        _paths.putIfAbsent(id.substring(id.lastIndexOf('/') + 1), () => asset);
       }
-      await Future.wait(_paths.entries.map((e) => _decode(e.key, e.value)));
+      // Giải mã mỗi file 1 lần, rồi gán cho mọi khoá trỏ tới file đó
+      final decoded = <String, ui.Image>{};
+      await Future.wait(_paths.values.toSet().map((asset) async {
+        final img = await _decode(asset);
+        if (img != null) decoded[asset] = img;
+      }));
+      _paths.forEach((key, asset) {
+        final img = decoded[asset];
+        if (img != null) _images[key] = img;
+      });
     } catch (e) {
       _ready = null; // lỗi thì lần sau thử lại
       debugPrint('Word images load error: $e');
     }
   }
 
-  Future<void> _decode(String key, String asset) async {
+  Future<ui.Image?> _decode(String asset) async {
     try {
       final data = await rootBundle.load(asset);
       // KHÔNG dùng ui.ImageDescriptor: web không hỗ trợ (lỗi => game lặng lẽ vẽ emoji).
@@ -84,9 +96,10 @@ class WordImages {
       );
       final frame = await codec.getNextFrame();
       codec.dispose();
-      _images[key] = frame.image;
+      return frame.image;
     } catch (e) {
       debugPrint('Word image decode error ($asset): $e');
+      return null;
     }
   }
 

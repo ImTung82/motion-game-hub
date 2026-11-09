@@ -3,15 +3,15 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../motion/motion_state.dart';
 import '../../services/sound_service.dart';
-import '../../services/word_images.dart';
+import '../../services/word_bank.dart';
 import 'penalty_models.dart';
 
 class PenaltyEngine extends ChangeNotifier {
   final SoccerBall ball = SoccerBall();
-  final List<GoalFruitTarget> targets = [];
+  final List<GoalWordTarget> targets = [];
   final List<PenaltyParticle> particles = [];
 
-  FruitItem? currentTargetFruit;
+  WordEntry? currentTargetWord;
   int targetSlotIndex = 1; // 0: Trái, 1: Giữa, 2: Phải
 
   // Khung thành (toạ độ chuẩn hoá theo goalHalfW): cột trái -1.04 -> cột phải +1.04.
@@ -109,10 +109,10 @@ class PenaltyEngine extends ChangeNotifier {
 
   /// Hiện banner mục tiêu, thổi còi & đọc tên hoa quả
   void announceTarget() {
-    if (currentTargetFruit == null) return;
+    if (currentTargetWord == null) return;
     bannerTimer = 3.0;
     SoundService.instance.playWhistle();
-    SoundService.instance.playWord(currentTargetFruit!.name);
+    SoundService.instance.playWord(currentTargetWord!.word);
     _wordRepeatTimer = 5.0;
   }
 
@@ -126,38 +126,38 @@ class PenaltyEngine extends ChangeNotifier {
     aimX = 0.0;
     aimY = slotCenterY;
 
-    // Chọn ngẫu nhiên 3 loại hoa quả khác nhau; quả đầu danh sách làm mục tiêu
-    // (chạy thử trên localhost: ưu tiên quả đã có ảnh, xem WordImages.testImagesOnly)
-    final chosen3 = WordImages.instance.shuffledPreferImages(kAllFruits, (f) => f.name, _random, min: 3).take(3).toList();
+    // Chọn ngẫu nhiên 3 từ khác nhau trong kho từ chung; từ đầu danh sách làm mục tiêu
+    // (chạy thử trên localhost: ưu tiên từ đã có ảnh, xem WordImages.testImagesOnly)
+    final chosen3 = WordBank.instance.shuffled(_random, min: 3).take(3).toList();
     final target = chosen3.first;
 
     // Đặt mục tiêu vào 1 ô ngẫu nhiên trong 3 ô
     chosen3.shuffle(_random);
     targetSlotIndex = chosen3.indexOf(target);
-    currentTargetFruit = target;
+    currentTargetWord = target;
 
     targets.clear();
-    targets.add(GoalFruitTarget(
+    targets.add(GoalWordTarget(
       slotIndex: 0,
-      fruit: chosen3[0],
+      word: chosen3[0],
       x: -slotWidth, // Ô Trái
       y: slotCenterY,
     ));
-    targets.add(GoalFruitTarget(
+    targets.add(GoalWordTarget(
       slotIndex: 1,
-      fruit: chosen3[1],
+      word: chosen3[1],
       x: 0.0,        // Ô Giữa
       y: slotCenterY,
     ));
-    targets.add(GoalFruitTarget(
+    targets.add(GoalWordTarget(
       slotIndex: 2,
-      fruit: chosen3[2],
+      word: chosen3[2],
       x: slotWidth,  // Ô Phải
       y: slotCenterY,
     ));
 
     // Chỉ chữ + âm thanh, KHÔNG hiện hình: bé phải nghe & đọc để tìm đúng hình
-    bannerTitle = 'TARGET: ${currentTargetFruit!.name}';
+    bannerTitle = 'TARGET: ${currentTargetWord!.title}';
     bannerTimer = 3.0;
     _wordRepeatTimer = 5.0;
     if (announce) announceTarget();
@@ -165,8 +165,8 @@ class PenaltyEngine extends ChangeNotifier {
 
   /// Đọc lại từ mục tiêu (tự động mỗi 5 giây khi đang ngắm)
   void replayTargetWord() {
-    if (currentTargetFruit == null || isGameOver || isPaused) return;
-    SoundService.instance.playWord(currentTargetFruit!.name);
+    if (currentTargetWord == null || isGameOver || isPaused) return;
+    SoundService.instance.playWord(currentTargetWord!.word);
     _wordRepeatTimer = 5.0;
   }
 
@@ -319,7 +319,7 @@ class PenaltyEngine extends ChangeNotifier {
       bannerTimer = 2.0;
 
       _spawnConfetti(ball.x, ball.y);
-      _spawnFruitBurst(ball.x, ball.y, currentTargetFruit!.colorValue);
+      _spawnFruitBurst(ball.x, ball.y, currentTargetWord!.color.toARGB32());
     } else {
       // SÚT NHẦM QUẢ KHÁC!
       currentOutcome = ShotOutcome.wrongTarget;

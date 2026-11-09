@@ -1,5 +1,9 @@
 import 'dart:ui';
 
+import '../../services/word_bank.dart';
+
+export '../../services/word_bank.dart' show WordEntry;
+
 enum BallState {
   incoming,
   saved,
@@ -107,80 +111,6 @@ enum KeeperDifficulty {
   });
 }
 
-/// Mọi từ của game (chỉ các từ đã có file phát âm trong assets/words); không chia chủ đề
-const List<WordItem> allKeeperWords = [...WordItem.fruits, ...WordItem.animals, ...WordItem.things, ...WordItem.extras];
-
-class WordItem {
-  final String word;
-  final String label;
-  final String emoji;
-  final Color color;
-
-  const WordItem({
-    required this.word,
-    required this.label,
-    required this.emoji,
-    required this.color,
-  });
-
-  static const List<WordItem> fruits = [
-    WordItem(word: 'apple', label: 'APPLE', emoji: '🍎', color: Color(0xFFFF5252)),
-    WordItem(word: 'banana', label: 'BANANA', emoji: '🍌', color: Color(0xFFFFD600)),
-    WordItem(word: 'cherry', label: 'CHERRY', emoji: '🍒', color: Color(0xFFD50000)),
-    WordItem(word: 'coconut', label: 'COCONUT', emoji: '🥥', color: Color(0xFF8D6E63)),
-    WordItem(word: 'grapes', label: 'GRAPES', emoji: '🍇', color: Color(0xFFAB47BC)),
-    WordItem(word: 'kiwi', label: 'KIWI', emoji: '🥝', color: Color(0xFF7CB342)),
-    WordItem(word: 'lemon', label: 'LEMON', emoji: '🍋', color: Color(0xFFFFEE58)),
-    WordItem(word: 'mango', label: 'MANGO', emoji: '🥭', color: Color(0xFFFFA000)),
-    WordItem(word: 'melon', label: 'MELON', emoji: '🍈', color: Color(0xFF9CCC65)),
-    WordItem(word: 'orange', label: 'ORANGE', emoji: '🍊', color: Color(0xFFFF9800)),
-    WordItem(word: 'peach', label: 'PEACH', emoji: '🍑', color: Color(0xFFFF8A65)),
-    WordItem(word: 'pear', label: 'PEAR', emoji: '🍐', color: Color(0xFFC0CA33)),
-    WordItem(word: 'pineapple', label: 'PINEAPPLE', emoji: '🍍', color: Color(0xFFFFC107)),
-    WordItem(word: 'strawberry', label: 'STRAWBERRY', emoji: '🍓', color: Color(0xFFFF1744)),
-    WordItem(word: 'watermelon', label: 'WATERMELON', emoji: '🍉', color: Color(0xFF43A047)),
-    WordItem(word: 'avocado', label: 'AVOCADO', emoji: '🥑', color: Color(0xFF689F38)),
-  ];
-
-  static const List<WordItem> animals = [
-    WordItem(word: 'cat', label: 'CAT', emoji: '🐱', color: Color(0xFFFF9100)),
-    WordItem(word: 'dog', label: 'DOG', emoji: '🐶', color: Color(0xFF8D6E63)),
-    WordItem(word: 'pig', label: 'PIG', emoji: '🐷', color: Color(0xFFFF80AB)),
-    WordItem(word: 'frog', label: 'FROG', emoji: '🐸', color: Color(0xFF4CAF50)),
-    WordItem(word: 'fox', label: 'FOX', emoji: '🦊', color: Color(0xFFFF6D00)),
-    WordItem(word: 'hen', label: 'HEN', emoji: '🐔', color: Color(0xFFE53935)),
-    WordItem(word: 'rat', label: 'RAT', emoji: '🐀', color: Color(0xFF78909C)),
-    WordItem(word: 'bug', label: 'BUG', emoji: '🐛', color: Color(0xFF8BC34A)),
-    WordItem(word: 'bat', label: 'BAT', emoji: '🦇', color: Color(0xFF5E35B1)),
-  ];
-
-  static const List<WordItem> things = [
-    WordItem(word: 'box', label: 'BOX', emoji: '📦', color: Color(0xFF795548)),
-    WordItem(word: 'hat', label: 'HAT', emoji: '🎩', color: Color(0xFF7E57C2)),
-    WordItem(word: 'sun', label: 'SUN', emoji: '☀️', color: Color(0xFFFFAB00)),
-    WordItem(word: 'pen', label: 'PEN', emoji: '🖊️', color: Color(0xFF1E88E5)),
-    WordItem(word: 'mug', label: 'MUG', emoji: '☕', color: Color(0xFF6D4C41)),
-    WordItem(word: 'van', label: 'VAN', emoji: '🚐', color: Color(0xFF039BE5)),
-    WordItem(word: 'map', label: 'MAP', emoji: '🗺️', color: Color(0xFF26A69A)),
-    WordItem(word: 'bed', label: 'BED', emoji: '🛏️', color: Color(0xFF5C6BC0)),
-    WordItem(word: 'pan', label: 'PAN', emoji: '🍳', color: Color(0xFF546E7A)),
-    WordItem(word: 'cap', label: 'CAP', emoji: '🧢', color: Color(0xFF1565C0)),
-    WordItem(word: 'can', label: 'CAN', emoji: '🥫', color: Color(0xFFE53935)),
-    WordItem(word: 'net', label: 'NET', emoji: '🥅', color: Color(0xFF00897B)),
-    WordItem(word: 'tub', label: 'TUB', emoji: '🛁', color: Color(0xFF29B6F6)),
-  ];
-
-  /// Từ lẻ (màu, số, động từ, tính từ)
-  static const List<WordItem> extras = [
-    WordItem(word: 'red', label: 'RED', emoji: '🔴', color: Color(0xFFFF1744)),
-    WordItem(word: 'six', label: 'SIX', emoji: '6️⃣', color: Color(0xFF00E676)),
-    WordItem(word: 'ten', label: 'TEN', emoji: '🔟', color: Color(0xFF00B0FF)),
-    WordItem(word: 'run', label: 'RUN', emoji: '🏃', color: Color(0xFF2979FF)),
-    WordItem(word: 'cold', label: 'COLD', emoji: '🥶', color: Color(0xFF29B6F6)),
-    WordItem(word: 'small', label: 'SMALL', emoji: '🐜', color: Color(0xFF8D6E63)),
-  ];
-}
-
 /// Quy đổi toạ độ game (-1 -> 1) sang pixel màn hình và kích thước vật thể co giãn theo màn hình.
 /// Dùng chung cho canvas (vẽ), engine (va chạm) và screen (điểm bay) để 3 nơi luôn khớp nhau.
 class KeeperLayout {
@@ -211,7 +141,7 @@ class GoalBall {
   final double startY; // Tọa độ xuất phát
   final double targetX; // Mục tiêu khung thành
   final double targetY; // Mục tiêu khung thành
-  final WordItem wordItem;
+  final WordEntry wordItem;
   final double speed; // Thời gian bay (giây)
 
   double currentX = 0.0;
@@ -285,7 +215,7 @@ class SparkParticle {
 
 class SaveEvent {
   final bool isSuperCatch;
-  final WordItem word;
+  final WordEntry word;
   final Offset screenPosition; // Toạ độ game (-1 -> 1)
   final int starsGained;
   final GloveType? gloveType;

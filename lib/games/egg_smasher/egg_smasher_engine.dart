@@ -4,74 +4,10 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../motion/motion_state.dart';
 import '../../services/sound_service.dart';
-import '../../services/word_images.dart';
+import '../../services/word_bank.dart';
 import 'egg_smasher_models.dart';
 
 class EggSmasherEngine extends ChangeNotifier {
-  // Kho từ vựng Phonics & CVC Words cho trẻ em
-  static const List<PhonicsWord> phonicsDb = [
-    // -at family
-    PhonicsWord(word: 'CAT', phonicsFamily: '-at', iconEmoji: '🐱', materialIcon: Icons.pets),
-    PhonicsWord(word: 'HAT', phonicsFamily: '-at', iconEmoji: '🎩', materialIcon: Icons.face_retouching_natural),
-    PhonicsWord(word: 'BAT', phonicsFamily: '-at', iconEmoji: '🦇', materialIcon: Icons.nightlight_round),
-    PhonicsWord(word: 'MAT', phonicsFamily: '-at', iconEmoji: '🧶', materialIcon: Icons.crop_square),
-    PhonicsWord(word: 'RAT', phonicsFamily: '-at', iconEmoji: '🐭', materialIcon: Icons.pest_control),
-
-    // -en family
-    PhonicsWord(word: 'HEN', phonicsFamily: '-en', iconEmoji: '🐔', materialIcon: Icons.egg),
-    PhonicsWord(word: 'PEN', phonicsFamily: '-en', iconEmoji: '🖊️', materialIcon: Icons.edit),
-    PhonicsWord(word: 'TEN', phonicsFamily: '-en', iconEmoji: '🔟', materialIcon: Icons.looks_one),
-
-    // -ig family
-    PhonicsWord(word: 'PIG', phonicsFamily: '-ig', iconEmoji: '🐷', materialIcon: Icons.savings),
-    PhonicsWord(word: 'WIG', phonicsFamily: '-ig', iconEmoji: '💇', materialIcon: Icons.face),
-    PhonicsWord(word: 'BIG', phonicsFamily: '-ig', iconEmoji: '🐘', materialIcon: Icons.fullscreen),
-
-    // -og family
-    PhonicsWord(word: 'DOG', phonicsFamily: '-og', iconEmoji: '🐶', materialIcon: Icons.pets),
-    PhonicsWord(word: 'FROG', phonicsFamily: '-og', iconEmoji: '🐸', materialIcon: Icons.water),
-    PhonicsWord(word: 'LOG', phonicsFamily: '-og', iconEmoji: '🪵', materialIcon: Icons.forest),
-
-    // -un family
-    PhonicsWord(word: 'SUN', phonicsFamily: '-un', iconEmoji: '☀️', materialIcon: Icons.wb_sunny),
-    PhonicsWord(word: 'RUN', phonicsFamily: '-un', iconEmoji: '🏃', materialIcon: Icons.directions_run),
-    PhonicsWord(word: 'BUN', phonicsFamily: '-un', iconEmoji: '🥯', materialIcon: Icons.bakery_dining),
-
-    // -an family
-    PhonicsWord(word: 'PAN', phonicsFamily: '-an', iconEmoji: '🍳', materialIcon: Icons.soup_kitchen),
-    PhonicsWord(word: 'VAN', phonicsFamily: '-an', iconEmoji: '🚐', materialIcon: Icons.airport_shuttle),
-    PhonicsWord(word: 'CAN', phonicsFamily: '-an', iconEmoji: '🥫', materialIcon: Icons.inventory_2),
-
-    // -ap / -ab family
-    PhonicsWord(word: 'CAP', phonicsFamily: '-ap', iconEmoji: '🧢', materialIcon: Icons.checkroom),
-    PhonicsWord(word: 'MAP', phonicsFamily: '-ap', iconEmoji: '🗺️', materialIcon: Icons.map),
-    PhonicsWord(word: 'CAB', phonicsFamily: '-ab', iconEmoji: '🚕', materialIcon: Icons.local_taxi),
-
-    // -ed / -et / -eg family
-    PhonicsWord(word: 'BED', phonicsFamily: '-ed', iconEmoji: '🛏️', materialIcon: Icons.bed),
-    PhonicsWord(word: 'RED', phonicsFamily: '-ed', iconEmoji: '🔴', materialIcon: Icons.circle),
-    PhonicsWord(word: 'NET', phonicsFamily: '-et', iconEmoji: '🥅', materialIcon: Icons.sports_soccer),
-    PhonicsWord(word: 'LEG', phonicsFamily: '-eg', iconEmoji: '🦵', materialIcon: Icons.directions_walk),
-
-    // -in / -ip / -ix family
-    PhonicsWord(word: 'PIN', phonicsFamily: '-in', iconEmoji: '📌', materialIcon: Icons.push_pin),
-    PhonicsWord(word: 'BIN', phonicsFamily: '-in', iconEmoji: '🗑️', materialIcon: Icons.delete),
-    PhonicsWord(word: 'LIP', phonicsFamily: '-ip', iconEmoji: '👄', materialIcon: Icons.face),
-    PhonicsWord(word: 'SIX', phonicsFamily: '-ix', iconEmoji: '6️⃣', materialIcon: Icons.looks_6),
-
-    // -ot / -ox family
-    PhonicsWord(word: 'POT', phonicsFamily: '-ot', iconEmoji: '🍲', materialIcon: Icons.soup_kitchen),
-    PhonicsWord(word: 'HOT', phonicsFamily: '-ot', iconEmoji: '🔥', materialIcon: Icons.local_fire_department),
-    PhonicsWord(word: 'BOX', phonicsFamily: '-ox', iconEmoji: '📦', materialIcon: Icons.inventory_2),
-    PhonicsWord(word: 'FOX', phonicsFamily: '-ox', iconEmoji: '🦊', materialIcon: Icons.pets),
-
-    // -ug / -ub family
-    PhonicsWord(word: 'BUG', phonicsFamily: '-ug', iconEmoji: '🐛', materialIcon: Icons.bug_report),
-    PhonicsWord(word: 'MUG', phonicsFamily: '-ug', iconEmoji: '☕', materialIcon: Icons.coffee),
-    PhonicsWord(word: 'HUG', phonicsFamily: '-ug', iconEmoji: '🤗', materialIcon: Icons.favorite),
-    PhonicsWord(word: 'TUB', phonicsFamily: '-ub', iconEmoji: '🛁', materialIcon: Icons.bathtub),
-  ];
-
   // Trạng thái màn chơi
   bool isPlaying = false;
   bool isGameOver = false;
@@ -89,10 +25,10 @@ class EggSmasherEngine extends ChangeNotifier {
 
   /// Gọi khi ghi điểm: (điểm cộng, chuỗi đúng, toạ độ chuẩn hoá x/y trên màn hình) -> để vẽ điểm bay
   void Function(int gained, int streak, double x, double y)? onScored; // chờ hiệu ứng đập sai cuối cùng trước khi hiện Game Over
-  PhonicsWord? _lastTarget;
+  WordEntry? _lastTarget;
 
   // Dữ liệu vòng chơi hiện tại
-  PhonicsWord? currentTarget;
+  WordEntry? currentTarget;
   final List<EggItem> eggs = [];
   final List<EggShellFragment> fragments = [];
   final List<SparkleStar> sparkles = [];
@@ -218,9 +154,9 @@ class EggSmasherEngine extends ChangeNotifier {
     bannerMessage = '';
     eggs.clear();
 
-    // Chọn từ mục tiêu ngẫu nhiên từ DB (không lặp lại từ của vòng ngay trước)
+    // Chọn từ mục tiêu ngẫu nhiên trong kho từ chung (không lặp lại từ của vòng ngay trước)
     // (chạy thử trên localhost: chỉ từ đã có ảnh, xem WordImages.testImagesOnly)
-    final availableWords = WordImages.instance.shuffledPreferImages(phonicsDb, (w) => w.word, _random, min: 3);
+    final availableWords = WordBank.instance.shuffled(_random, min: 3);
     final target = availableWords.firstWhere((w) => w.word != _lastTarget?.word, orElse: () => availableWords.first);
     currentTarget = target;
     _lastTarget = target;

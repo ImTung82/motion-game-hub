@@ -472,7 +472,7 @@ class _EggSmasherScreenState extends State<EggSmasherScreen> with SingleTickerPr
 
           RabbitMood mood = RabbitMood.normal;
           String? caption = 'Smash the egg:';
-          String headline = target.word;
+          String headline = target.label;
           String? footnote;
 
           if (_engine.isRoundTransition && _engine.lastSmashCorrect) {

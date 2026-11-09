@@ -39,7 +39,7 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
   int _shownScore = 0;
 
   // Banner từ vựng vừa cản phá thành công
-  WordItem? _latestWord;
+  WordEntry? _latestWord;
   bool _isSuperCatch = false;
   double _wordBannerTimer = 0.0;
 
@@ -730,7 +730,7 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
   }
 
   /// Thẻ từ vựng trong bộ sưu tập: chạm để nghe lại
-  Widget _buildWordTile(WordItem word, double s) {
+  Widget _buildWordTile(WordEntry word, double s) {
     return GestureDetector(
       onTap: () => SoundService.instance.playWord(word.word),
       child: Container(
@@ -744,7 +744,7 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            WordPicture(word: word.word, fallbackEmoji: word.emoji, size: 30 * s),
+            WordPicture(word: word.id, fallbackEmoji: word.emoji, size: 30 * s),
             FittedBox(
               fit: BoxFit.scaleDown,
               child: Padding(

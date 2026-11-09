@@ -235,8 +235,8 @@ class EggSmasherCanvasPainter extends CustomPainter {
     // Ảnh minh họa của từ (assets/words), chưa có ảnh thì dùng emoji; to, rõ ràng, căn chính giữa huy hiệu
     // Ảnh đã cắt sát hình (tool/optimize_word_images.mjs) => thu khung vào trong để góc ảnh (đuôi, tai...) không bị vòng tròn cắt mất
     final imageBox = Rect.fromCircle(center: badgeCenter, radius: badgeRadius * 0.84);
-    if (!WordImages.instance.paint(canvas, egg.word.word, imageBox, circle: true)) {
-      final emojiPainter = TextPainterCache.get(egg.word.iconEmoji, TextStyle(fontSize: rx * 0.64));
+    if (!WordImages.instance.paint(canvas, egg.word.id, imageBox, circle: true)) {
+      final emojiPainter = TextPainterCache.get(egg.word.emoji, TextStyle(fontSize: rx * 0.64));
       emojiPainter.paint(
         canvas,
         Offset(-emojiPainter.width / 2, badgeCenter.dy - emojiPainter.height / 2),
@@ -345,14 +345,14 @@ class EggSmasherCanvasPainter extends CustomPainter {
     canvas.drawRRect(cardRect, cardBorder);
 
     // Ảnh minh họa to (chưa có ảnh thì emoji)
-    if (!WordImages.instance.paint(canvas, c.word.word, Rect.fromLTWH(-25, -cardH * 0.42, 50, 50), radius: 10)) {
-      final emojiPainter = TextPainterCache.get(c.word.iconEmoji, const TextStyle(fontSize: 42));
+    if (!WordImages.instance.paint(canvas, c.word.id, Rect.fromLTWH(-25, -cardH * 0.42, 50, 50), radius: 10)) {
+      final emojiPainter = TextPainterCache.get(c.word.emoji, const TextStyle(fontSize: 42));
       emojiPainter.paint(canvas, Offset(-emojiPainter.width / 2, -cardH * 0.42));
     }
 
-    // Chữ từ vựng Phonics
+    // Chữ từ vựng (từ dài như WATERMELON thì thu nhỏ cho vừa thẻ)
     final wordPainter = TextPainterCache.get(
-      c.word.word,
+      c.word.label,
       const TextStyle(
         fontSize: 20,
         fontWeight: FontWeight.w900,
@@ -360,7 +360,12 @@ class EggSmasherCanvasPainter extends CustomPainter {
         color: Color(0xFF0F172A),
       ),
     );
-    wordPainter.paint(canvas, Offset(-wordPainter.width / 2, 14));
+    final double fit = math.min(1.0, (cardW - 14) / wordPainter.width);
+    canvas.save();
+    canvas.translate(0, 14 + wordPainter.height * (1 - fit) / 2);
+    canvas.scale(fit);
+    wordPainter.paint(canvas, Offset(-wordPainter.width / 2, 0));
+    canvas.restore();
 
     canvas.restore();
   }

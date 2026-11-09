@@ -23,8 +23,12 @@ Chạy trên Android (ML Kit + MediaPipe native) và Web (MediaPipe JS trong `we
 
 - Chia thư mục theo nhóm (`animals/`, `fruits/`, `colors/`...). Mỗi từ: `<từ>.mp3` (đọc) + `<từ>.png` (ảnh), cùng thư mục,
   tên chữ thường trùng từ trong game (VD `animals/cat.mp3`, `animals/cat.png`). Thêm nhóm mới => khai báo thư mục trong `pubspec.yaml`.
-- Code tra file theo tên qua AssetManifest (`SoundService.playWord`, `WordImages`) => thêm ảnh tới đâu game dùng tới đó,
-  từ chưa có ảnh thì tạm vẽ emoji. Khi đủ ảnh cho mọi từ thì bỏ hẳn emoji của từ (và bỏ `WordImages.testImagesOnly`).
+- Mọi game dùng chung kho từ `WordBank` (`lib/services/word_bank.dart`): dò mọi `.mp3` trong `assets/words` qua
+  AssetManifest => thêm `.mp3` + ảnh cho từ mới là cả 3 game tự dùng, không sửa code. Từ chưa có ảnh vẽ emoji trong
+  bảng `_emoji` của `WordBank` (chưa có cả ảnh lẫn emoji thì bỏ qua). Khi đủ ảnh cho mọi từ thì bỏ hẳn bảng emoji
+  (và bỏ `WordImages.testImagesOnly`).
+- Ảnh tra theo `WordEntry.id` = `<nhóm>/<từ>` vì có từ trùng tên khác nhóm (`colors/orange` vs `fruits/orange`);
+  `WordBank.shuffled` bỏ từ trùng chữ trong cùng 1 lượt.
 - Chạy thử (web localhost / bản debug): game chỉ ra từ ĐÃ CÓ ẢNH, thiếu thì bù từ emoji cho đủ số ô
   (`WordImages.shuffledPreferImages`). Bản thật (Firebase) dùng mọi từ.
 - Giải mã ảnh cho canvas dùng `ui.instantiateImageCodecWithSize`; KHÔNG dùng `ui.ImageDescriptor` (web không hỗ trợ
