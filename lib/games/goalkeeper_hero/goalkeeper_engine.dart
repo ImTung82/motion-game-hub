@@ -13,7 +13,6 @@ class GoalkeeperEngine extends ChangeNotifier {
   static const double ballStartY = 0.25; // Chấm phạt đền
   static const String _bestKey = 'goalkeeper_best_stars';
   static const String _difficultyKey = 'goalkeeper_difficulty';
-  static const String _topicKey = 'goalkeeper_topic';
 
   final math.Random _random = math.Random();
 
@@ -25,7 +24,6 @@ class GoalkeeperEngine extends ChangeNotifier {
 
   // Cấu hình ván chơi (lưu lại cho lần sau)
   KeeperDifficulty difficulty = KeeperDifficulty.easy;
-  WordTopic topic = WordTopic.fruits;
 
   /// Kích thước màn hình hiện tại, Screen cập nhật mỗi lần build để va chạm khớp với hình vẽ
   KeeperLayout layout = const KeeperLayout(Size(800, 400));
@@ -107,7 +105,6 @@ class GoalkeeperEngine extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       highScore = prefs.getInt(_bestKey) ?? 0;
       difficulty = KeeperDifficulty.values.asNameMap()[prefs.getString(_difficultyKey)] ?? difficulty;
-      topic = WordTopic.values.asNameMap()[prefs.getString(_topicKey)] ?? topic;
       notifyListeners();
     } catch (e) {
       debugPrint('Goalkeeper prefs error: $e');
@@ -127,12 +124,6 @@ class GoalkeeperEngine extends ChangeNotifier {
     difficulty = value;
     notifyListeners();
     SharedPreferences.getInstance().then((p) => p.setString(_difficultyKey, value.name)).catchError((_) => false);
-  }
-
-  void setTopic(WordTopic value) {
-    topic = value;
-    notifyListeners();
-    SharedPreferences.getInstance().then((p) => p.setString(_topicKey, value.name)).catchError((_) => false);
   }
 
   void _resetGloves() {
@@ -373,7 +364,7 @@ class GoalkeeperEngine extends ChangeNotifier {
   WordItem _nextWord() {
     if (_deck.isEmpty) {
       // (chạy thử trên localhost: chỉ từ đã có ảnh, xem WordImages.testImagesOnly)
-      _deck = WordImages.instance.shuffledPreferImages(topic.words, (w) => w.word, _random, min: 3);
+      _deck = WordImages.instance.shuffledPreferImages(allKeeperWords, (w) => w.word, _random, min: 3);
       if (_deck.length > 1 && _deck.last == _lastWord) {
         final tmp = _deck.first;
         _deck.first = _deck.last;

@@ -107,25 +107,8 @@ enum KeeperDifficulty {
   });
 }
 
-/// Chủ đề từ vựng: chỉ dùng các từ đã có file phát âm trong assets/words
-enum WordTopic {
-  fruits(label: 'FRUITS', emoji: '🍎'),
-  animals(label: 'ANIMALS', emoji: '🐶'),
-  things(label: 'THINGS', emoji: '📦'),
-  mixed(label: 'MIXED', emoji: '🎲');
-
-  final String label;
-  final String emoji;
-
-  const WordTopic({required this.label, required this.emoji});
-
-  List<WordItem> get words => switch (this) {
-        WordTopic.fruits => WordItem.fruits,
-        WordTopic.animals => WordItem.animals,
-        WordTopic.things => WordItem.things,
-        WordTopic.mixed => [...WordItem.fruits, ...WordItem.animals, ...WordItem.things, ...WordItem.extras],
-      };
-}
+/// Mọi từ của game (chỉ các từ đã có file phát âm trong assets/words); không chia chủ đề
+const List<WordItem> allKeeperWords = [...WordItem.fruits, ...WordItem.animals, ...WordItem.things, ...WordItem.extras];
 
 class WordItem {
   final String word;

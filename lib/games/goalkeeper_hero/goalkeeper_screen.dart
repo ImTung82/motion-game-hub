@@ -313,7 +313,7 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
             // 7. CHỌN MỨC ĐỘ & CHỦ ĐỀ TRƯỚC KHI CHƠI
             ListenableSelector(
               listenable: _engine,
-              selector: () => (_engine.phase, _engine.difficulty, _engine.topic),
+              selector: () => (_engine.phase, _engine.difficulty),
               builder: (context, _) {
                 if (_engine.phase != KeeperPhase.setup) return const SizedBox.shrink();
                 return _buildSetupDialog(s);
@@ -377,7 +377,7 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
   }
 
   // ===========================================================================
-  // CHỌN MỨC ĐỘ & CHỦ ĐỀ
+  // CHỌN MỨC ĐỘ
   // ===========================================================================
   Widget _buildSetupDialog(double s) {
     return KidDialog(
@@ -400,25 +400,6 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
                 selected: _engine.difficulty == d,
                 color: KidColors.blue,
                 onTap: () => _engine.setDifficulty(d),
-                s: s,
-              ),
-          ],
-        ),
-        SizedBox(height: 12 * s),
-        _sectionLabel('WORDS', s),
-        SizedBox(height: 6 * s),
-        Wrap(
-          alignment: WrapAlignment.center,
-          spacing: 8 * s,
-          runSpacing: 6 * s,
-          children: [
-            for (final t in WordTopic.values)
-              _buildOptionChip(
-                emoji: t.emoji,
-                label: t.label,
-                selected: _engine.topic == t,
-                color: KidColors.orange,
-                onTap: () => _engine.setTopic(t),
                 s: s,
               ),
           ],
