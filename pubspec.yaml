@@ -84,7 +84,16 @@ flutter:
   uses-material-design: true
   assets:
     - assets/audio/
-    - assets/words/
+    # Âm đọc từ chia theo nhóm; thêm nhóm mới thì khai báo thư mục ở đây (Flutter không tự lấy thư mục con)
+    - assets/words/actions/
+    - assets/words/animals/
+    - assets/words/body/
+    - assets/words/colors/
+    - assets/words/describing/
+    - assets/words/fruits/
+    - assets/words/nature/
+    - assets/words/numbers/
+    - assets/words/things/
     - assets/animations/
     - assets/images/
 

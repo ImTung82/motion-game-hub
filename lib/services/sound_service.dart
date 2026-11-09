@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show AssetManifest, rootBundle;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class SoundService {
@@ -31,12 +32,12 @@ class SoundService {
   final Map<String, AudioPlayer> _preloaded = {};
 
   DateTime _lastChomp = DateTime.fromMillisecondsSinceEpoch(0);
-  DateTime _lastClick = DateTime.fromMillisecondsSinceEpoch(0);
 
   bool get isMuted => _isMuted;
   double get volume => _volume;
 
   Future<void> _init() async {
+    _wordPathsFuture(); // dò sẵn đường dẫn âm đọc từ để lần đọc đầu tiên không bị chậm
     // Cho phép nhiều âm phát CHỒNG lên nhau (vd: còi + đọc từ cùng lúc).
     // Mặc định Android mỗi lần phát sẽ giành audio focus -> âm đang phát trước bị dừng.
     final mixContext = AudioContextConfig(focus: AudioContextConfigFocus.mixWithOthers).build();
@@ -246,16 +247,43 @@ class SoundService {
     _playSound('hatch.wav', volumeMultiplier: 0.95);
   }
 
+  // Âm đọc từ nằm trong thư mục con theo nhóm: assets/words/<nhóm>/<từ>.mp3 (VD animals/cat.mp3).
+  // Tra theo tên file trong AssetManifest => chuyển từ sang nhóm khác / thêm nhóm không phải sửa code.
+  Future<Map<String, String>>? _wordPaths;
+
+  Future<Map<String, String>> _wordPathsFuture() {
+    return _wordPaths ??= () async {
+      final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+      final paths = <String, String>{};
+      for (final asset in manifest.listAssets()) {
+        if (!asset.startsWith('assets/words/') || !asset.endsWith('.mp3')) continue;
+        final name = asset.substring(asset.lastIndexOf('/') + 1, asset.length - '.mp3'.length);
+        paths[name] = asset.substring('assets/'.length); // AssetSource tự thêm tiền tố assets/
+      }
+      return paths;
+    }()
+        .catchError((Object e) {
+      _wordPaths = null; // lỗi thì lần sau thử lại
+      debugPrint('Word audio index error: $e');
+      return <String, String>{};
+    });
+  }
+
   Future<void> playWord(String word) async {
     if (_isMuted || _players.isEmpty) return;
 
     try {
-      final fileName = '${word.toLowerCase().trim()}.mp3';
+      final key = word.toLowerCase().trim();
+      final path = (await _wordPathsFuture())[key];
+      if (path == null) {
+        debugPrint('Word audio not found: $key');
+        return;
+      }
       final player = _pickPlayer(PlayerMode.mediaPlayer);
 
       final double vol = _volume.clamp(0.0, 1.0);
       await player.setVolume(vol);
-      await player.play(AssetSource('words/$fileName'));
+      await player.play(AssetSource(path));
     } catch (e) {
       debugPrint('Word audio play error ($word): $e');
     }
@@ -264,12 +292,9 @@ class SoundService {
   // ==========================================
   // UI & HUB
   // ==========================================
-  void playClick() {
-    final now = DateTime.now();
-    if (now.difference(_lastClick).inMilliseconds < 50) return;
-    _lastClick = now;
-    _playSound('click.wav', volumeMultiplier: 0.5);
-  }
+  /// Tiếng bấm nút: TẠM TẮT (đã bỏ click.wav, sẽ thay âm khác). Có âm mới thì phát ở đây,
+  /// nhớ chặn bấm dồn (VD bỏ qua nếu < 50 ms từ lần trước) — mọi nút trong app đều gọi hàm này.
+  void playClick() {}
 
   void dispose() {
     for (final p in [..._players, ..._mediaPlayers, ..._preloaded.values]) {
