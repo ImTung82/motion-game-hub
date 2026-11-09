@@ -124,6 +124,6 @@ class WordBank {
     'things/bed': '🛏️', 'things/bin': '🗑️', 'things/box': '📦', 'things/bun': '🥯', 'things/cab': '🚕',
     'things/can': '🥫', 'things/cap': '🧢', 'things/hat': '🎩', 'things/map': '🗺️', 'things/mat': '🧶',
     'things/mug': '☕', 'things/net': '🥅', 'things/pan': '🍳', 'things/pen': '🖊️', 'things/pin': '📌',
-    'things/pot': '🍲', 'things/tub': '🛁', 'things/van': '🚐', 'things/wig': '💇',
+    'things/pot': '🍲', 'things/tub': '🛁', 'things/van': '🚐'
   };
 }
