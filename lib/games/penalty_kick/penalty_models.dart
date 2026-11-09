@@ -102,7 +102,7 @@ class PenaltyParticle {
   }
 }
 
-/// Bộ đề hoa quả cho Fruits Penalty (tên viết hoa chữ cái đầu; audio: `assets/words/<tên thường>.mp3`)
+/// Bộ đề hoa quả cho Fruits Penalty (tên viết hoa chữ cái đầu; audio: `assets/words/fruits/<tên thường>.mp3`)
 const List<FruitItem> kAllFruits = [
   FruitItem(name: 'Apple', emoji: '🍎', colorValue: 0xFFFF2A55),
   FruitItem(name: 'Banana', emoji: '🍌', colorValue: 0xFFFFD600),

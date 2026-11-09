@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../motion/motion_state.dart';
 import '../../services/sound_service.dart';
+import '../../services/word_images.dart';
 import '../../ui/widgets/ready_gate.dart' show ReadyTiming;
 import 'goalkeeper_models.dart';
 
@@ -371,7 +372,8 @@ class GoalkeeperEngine extends ChangeNotifier {
   /// Rút từ theo kiểu xáo bài: hết bộ mới xáo lại, không để 2 quả liên tiếp trùng từ
   WordItem _nextWord() {
     if (_deck.isEmpty) {
-      _deck = List.of(topic.words)..shuffle(_random);
+      // (chạy thử trên localhost: chỉ từ đã có ảnh, xem WordImages.testImagesOnly)
+      _deck = WordImages.instance.shuffledPreferImages(topic.words, (w) => w.word, _random, min: 3);
       if (_deck.length > 1 && _deck.last == _lastWord) {
         final tmp = _deck.first;
         _deck.first = _deck.last;

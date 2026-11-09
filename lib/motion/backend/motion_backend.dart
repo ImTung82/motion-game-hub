@@ -49,7 +49,7 @@ abstract class MotionBackend {
   MotionBackend({required this.onFace, required this.onHands, required this.aiRotationIndex});
 
   /// Chế độ đang chơi: chỉ chạy detector tương ứng (mặt hoặc tay)
-  MotionInputMode mode = MotionInputMode.face;
+  MotionInputMode mode = MotionInputMode.hand;
 
   /// Số tay tối đa cần nhận diện (1 hoặc 2). Web: 1 tay nhanh gấp ~2 lần khi người chơi chỉ giơ 1 tay.
   /// Android giữ nguyên 2 tay (plugin tạo 1 lần, chưa đổi được lúc chạy).

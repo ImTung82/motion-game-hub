@@ -14,6 +14,7 @@ import '../../ui/widgets/rabbit_mascot.dart';
 import '../../ui/widgets/ready_gate.dart';
 import '../../ui/widgets/score_fly_layer.dart';
 import '../../ui/widgets/touch_hint.dart';
+import '../../ui/widgets/word_picture.dart';
 import 'goalkeeper_canvas.dart';
 import 'goalkeeper_engine.dart';
 import 'goalkeeper_models.dart';
@@ -762,7 +763,7 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(word.emoji, style: TextStyle(fontSize: 24 * s)),
+            WordPicture(word: word.word, fallbackEmoji: word.emoji, size: 30 * s),
             FittedBox(
               fit: BoxFit.scaleDown,
               child: Padding(
