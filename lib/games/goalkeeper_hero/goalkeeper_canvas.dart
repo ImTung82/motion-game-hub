@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../../ui/widgets/ambient_decor.dart';
+import '../../services/word_images.dart';
 import '../../ui/widgets/text_painter_cache.dart';
 import 'goalkeeper_engine.dart';
 import 'goalkeeper_models.dart';
@@ -555,7 +556,7 @@ class _GoalkeeperPainter extends CustomPainter {
 
     final double padX = 10 * scale;
     final double padY = 4 * scale;
-    final double badgeW = math.max(emojiPainter.width, labelPainter.width) * f + padX * 2;
+    final double badgeW = math.max(math.max(emojiPainter.width, emojiPainter.height), labelPainter.width) * f + padX * 2;
     final double badgeH = (emojiPainter.height + labelPainter.height) * f + padY * 2;
     final rect = Rect.fromLTWH(bottomCenter.dx - badgeW / 2, bottomCenter.dy - badgeH, badgeW, badgeH);
     final rrect = RRect.fromRectAndRadius(rect, Radius.circular(16 * scale));
@@ -579,7 +580,11 @@ class _GoalkeeperPainter extends CustomPainter {
     canvas.save();
     canvas.translate(rect.center.dx, rect.top + padY);
     canvas.scale(f);
-    emojiPainter.paint(canvas, Offset(-emojiPainter.width / 2, 0));
+    // Ảnh minh họa của từ (assets/words) chiếm đúng chỗ của emoji; chưa có ảnh thì vẽ emoji
+    final double picSide = emojiPainter.height;
+    if (!WordImages.instance.paint(canvas, word.word, Rect.fromLTWH(-picSide / 2, 0, picSide, picSide), radius: 6 * l.u)) {
+      emojiPainter.paint(canvas, Offset(-emojiPainter.width / 2, 0));
+    }
     labelPainter.paint(canvas, Offset(-labelPainter.width / 2, emojiPainter.height));
     canvas.restore();
   }

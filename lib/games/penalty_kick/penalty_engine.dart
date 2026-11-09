@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../motion/motion_state.dart';
 import '../../services/sound_service.dart';
+import '../../services/word_images.dart';
 import 'penalty_models.dart';
 
 class PenaltyEngine extends ChangeNotifier {
@@ -126,13 +127,15 @@ class PenaltyEngine extends ChangeNotifier {
     aimX = 0.0;
     aimY = slotCenterY;
 
-    // Chọn ngẫu nhiên 3 loại hoa quả khác nhau
-    final shuffled = List<FruitItem>.from(kAllFruits)..shuffle(_random);
-    final chosen3 = shuffled.take(3).toList();
+    // Chọn ngẫu nhiên 3 loại hoa quả khác nhau; quả đầu danh sách làm mục tiêu
+    // (chạy thử trên localhost: ưu tiên quả đã có ảnh, xem WordImages.testImagesOnly)
+    final chosen3 = WordImages.instance.shuffledPreferImages(kAllFruits, (f) => f.name, _random, min: 3).take(3).toList();
+    final target = chosen3.first;
 
-    // Chọn ngẫu nhiên 1 trong 3 ô làm mục tiêu
-    targetSlotIndex = _random.nextInt(3);
-    currentTargetFruit = chosen3[targetSlotIndex];
+    // Đặt mục tiêu vào 1 ô ngẫu nhiên trong 3 ô
+    chosen3.shuffle(_random);
+    targetSlotIndex = chosen3.indexOf(target);
+    currentTargetFruit = target;
 
     targets.clear();
     targets.add(GoalFruitTarget(

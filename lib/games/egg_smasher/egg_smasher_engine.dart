@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../motion/motion_state.dart';
 import '../../services/sound_service.dart';
+import '../../services/word_images.dart';
 import 'egg_smasher_models.dart';
 
 class EggSmasherEngine extends ChangeNotifier {
@@ -218,8 +219,9 @@ class EggSmasherEngine extends ChangeNotifier {
     eggs.clear();
 
     // Chọn từ mục tiêu ngẫu nhiên từ DB (không lặp lại từ của vòng ngay trước)
-    final availableWords = List<PhonicsWord>.from(phonicsDb)..shuffle(_random);
-    final target = availableWords.firstWhere((w) => w.word != _lastTarget?.word);
+    // (chạy thử trên localhost: chỉ từ đã có ảnh, xem WordImages.testImagesOnly)
+    final availableWords = WordImages.instance.shuffledPreferImages(phonicsDb, (w) => w.word, _random, min: 3);
+    final target = availableWords.firstWhere((w) => w.word != _lastTarget?.word, orElse: () => availableWords.first);
     currentTarget = target;
     _lastTarget = target;
 

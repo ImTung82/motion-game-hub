@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../ui/widgets/ambient_decor.dart';
+import '../../services/word_images.dart';
 import '../../ui/widgets/text_painter_cache.dart';
 import 'egg_smasher_engine.dart';
 import 'egg_smasher_models.dart';
@@ -231,12 +232,16 @@ class EggSmasherCanvasPainter extends CustomPainter {
       ..style = PaintingStyle.stroke;
     canvas.drawCircle(badgeCenter, badgeRadius, badgeBorder);
 
-    // Vẽ Icon Emoji minh họa to, rõ ràng, căn chính giữa huy hiệu
-    final emojiPainter = TextPainterCache.get(egg.word.iconEmoji, TextStyle(fontSize: rx * 0.64));
-    emojiPainter.paint(
-      canvas,
-      Offset(-emojiPainter.width / 2, badgeCenter.dy - emojiPainter.height / 2),
-    );
+    // Ảnh minh họa của từ (assets/words), chưa có ảnh thì dùng emoji; to, rõ ràng, căn chính giữa huy hiệu
+    // Ảnh đã cắt sát hình (tool/optimize_word_images.mjs) => thu khung vào trong để góc ảnh (đuôi, tai...) không bị vòng tròn cắt mất
+    final imageBox = Rect.fromCircle(center: badgeCenter, radius: badgeRadius * 0.84);
+    if (!WordImages.instance.paint(canvas, egg.word.word, imageBox, circle: true)) {
+      final emojiPainter = TextPainterCache.get(egg.word.iconEmoji, TextStyle(fontSize: rx * 0.64));
+      emojiPainter.paint(
+        canvas,
+        Offset(-emojiPainter.width / 2, badgeCenter.dy - emojiPainter.height / 2),
+      );
+    }
   }
 
   // ===========================================================================
@@ -339,9 +344,11 @@ class EggSmasherCanvasPainter extends CustomPainter {
       ..style = PaintingStyle.stroke;
     canvas.drawRRect(cardRect, cardBorder);
 
-    // Emoji to khổng lồ
-    final emojiPainter = TextPainterCache.get(c.word.iconEmoji, const TextStyle(fontSize: 42));
-    emojiPainter.paint(canvas, Offset(-emojiPainter.width / 2, -cardH * 0.42));
+    // Ảnh minh họa to (chưa có ảnh thì emoji)
+    if (!WordImages.instance.paint(canvas, c.word.word, Rect.fromLTWH(-25, -cardH * 0.42, 50, 50), radius: 10)) {
+      final emojiPainter = TextPainterCache.get(c.word.iconEmoji, const TextStyle(fontSize: 42));
+      emojiPainter.paint(canvas, Offset(-emojiPainter.width / 2, -cardH * 0.42));
+    }
 
     // Chữ từ vựng Phonics
     final wordPainter = TextPainterCache.get(
