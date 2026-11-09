@@ -52,7 +52,6 @@ class PenaltyEngine extends ChangeNotifier {
 
   double netWobble = 0.0;
   String bannerTitle = '';
-  String bannerSubtitle = '';
   double bannerTimer = 0.0;
 
   ShotOutcome currentOutcome = ShotOutcome.none;
@@ -159,7 +158,6 @@ class PenaltyEngine extends ChangeNotifier {
 
     // Chỉ chữ + âm thanh, KHÔNG hiện hình: bé phải nghe & đọc để tìm đúng hình
     bannerTitle = 'TARGET: ${currentTargetFruit!.name}';
-    bannerSubtitle = 'Listen, read, then shoot the right picture!';
     bannerTimer = 3.0;
     _wordRepeatTimer = 5.0;
     if (announce) announceTarget();
@@ -315,9 +313,8 @@ class PenaltyEngine extends ChangeNotifier {
       final gained = 100 + (math.min(streak - 1, 5) * 20);
       score += gained;
       SoundService.instance.playGoal();
-      // Điểm hiển thị bằng hiệu ứng bay; banner chỉ nhắc lại từ + hình để bé ghi nhớ
+      // Điểm hiển thị bằng hiệu ứng bay
       bannerTitle = 'GOAL! ⚽';
-      bannerSubtitle = '${currentTargetFruit!.emoji} ${currentTargetFruit!.name}';
       onScored?.call(gained, streak, ball.x, ball.y);
       bannerTimer = 2.0;
 
@@ -329,9 +326,7 @@ class PenaltyEngine extends ChangeNotifier {
       streak = 0;
       lives = math.max(0, lives - 1);
       SoundService.instance.playWrongAnswer();
-      // Sau khi sút mới hé lộ: ô vừa sút là gì & đáp án đúng là gì
       bannerTitle = 'OOPS! ❌';
-      bannerSubtitle = '${hitTarget.fruit.emoji} ${hitTarget.fruit.name} ✗   •   ${currentTargetFruit!.emoji} ${currentTargetFruit!.name} ✓';
       bannerTimer = 2.0;
 
       _spawnExplosion(ball.x, ball.y, 0xFFFF0055);

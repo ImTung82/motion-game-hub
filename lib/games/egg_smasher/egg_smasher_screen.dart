@@ -479,13 +479,12 @@ class _EggSmasherScreenState extends State<EggSmasherScreen> with SingleTickerPr
             mood = RabbitMood.happy;
             caption = null;
             headline = _praises[_engine.eggsSmashed % _praises.length];
-            footnote = '${target.iconEmoji} ${target.word}';
           } else if (_engine.isRoundTransition || _engine.lives == 0) {
-            // Đập sai: hé lộ đáp án đúng rồi sang từ tiếp theo
+            // Đập sai: sang từ tiếp theo
             mood = RabbitMood.sad;
             caption = null;
             headline = 'OOPS!';
-            footnote = _engine.lives > 0 ? 'It was ${target.iconEmoji} ${target.word}' : 'Out of lives! 💔';
+            if (_engine.lives == 0) footnote = 'Out of lives! 💔';
           }
 
           return RabbitMascot(
