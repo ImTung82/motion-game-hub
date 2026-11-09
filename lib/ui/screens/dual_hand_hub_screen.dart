@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../motion/face_motion_controller.dart';
 import '../../motion/motion_state.dart';
+import '../../services/music_service.dart';
 import '../../services/sound_service.dart';
 import '../widgets/calibration_dialog.dart';
 import '../widgets/company_logo_badge.dart';
@@ -29,9 +30,12 @@ class _DualHandHubScreenState extends State<DualHandHubScreen> {
     Color(0xFF9C27B0),
   ];
 
+  late final Object _music;
+
   @override
   void initState() {
     super.initState();
+    _music = MusicService.instance.push(MusicTrack.hub); // cùng bài với hub chính => nhạc chạy tiếp, không ngắt
     // Tự động chuyển sang Hand mode khi vào Hub 2 tay
     if (widget.motionController.inputMode != MotionInputMode.hand) {
       widget.motionController.inputMode = MotionInputMode.hand;
@@ -43,6 +47,7 @@ class _DualHandHubScreenState extends State<DualHandHubScreen> {
   @override
   void dispose() {
     widget.motionController.releaseTwoHands();
+    MusicService.instance.pop(_music);
     super.dispose();
   }
 

@@ -3,6 +3,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import '../../motion/face_motion_controller.dart';
+import '../../services/music_service.dart';
 import '../../services/sound_service.dart';
 import '../../ui/widgets/calibration_dialog.dart';
 import '../../ui/widgets/camera_pip_overlay.dart';
@@ -55,9 +56,16 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
 
   bool _prevShowCameraPip = true;
 
+
+  late final Object _music;
+
+  /// Màn kết quả: nhạc nền nhỏ đi (engine báo mỗi khung, MusicService bỏ qua khi không đổi)
+  void _syncMusic() => MusicService.instance.setQuiet(_engine.isGameOver);
+
   @override
   void initState() {
     super.initState();
+    _music = MusicService.instance.push(MusicTrack.goalkeeperHero);
     _prevShowCameraPip = widget.motionController.showCameraPip;
     widget.motionController.setCameraPipQuietly(false);
 
@@ -66,6 +74,7 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
     _engine.onBallSaved = _onBallSaved;
     _engine.onGoalConceded = _onGoalConceded;
     _engine.onGameOver = _onGameOver;
+    _engine.addListener(_syncMusic);
 
     _ticker = createTicker(_onTick);
     _ticker.start();
@@ -153,7 +162,9 @@ class _GoalkeeperScreenState extends State<GoalkeeperScreen> with SingleTickerPr
     if (_ballListener != null) _ballStream?.removeListener(_ballListener!);
     widget.motionController.setCameraPipQuietly(_prevShowCameraPip, persist: true);
     _ticker.dispose();
+    _engine.removeListener(_syncMusic);
     _engine.dispose();
+    MusicService.instance.pop(_music);
     super.dispose();
   }
 

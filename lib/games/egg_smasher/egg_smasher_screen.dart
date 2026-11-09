@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import '../../motion/face_motion_controller.dart';
+import '../../services/music_service.dart';
 import '../../services/sound_service.dart';
 import '../../ui/widgets/calibration_dialog.dart';
 import '../../ui/widgets/camera_pip_overlay.dart';
@@ -49,14 +50,22 @@ class _EggSmasherScreenState extends State<EggSmasherScreen> with SingleTickerPr
   static const double _logoW = 96;
   static const double _logoH = 40;
 
+
+  late final Object _music;
+
+  /// Màn kết quả: nhạc nền nhỏ đi (engine báo mỗi khung, MusicService bỏ qua khi không đổi)
+  void _syncMusic() => MusicService.instance.setQuiet(_engine.isGameOver);
+
   @override
   void initState() {
     super.initState();
+    _music = MusicService.instance.push(MusicTrack.eggSmasher);
     // Mặc định ẩn camera PiP khi vào game (bấm nút camera trên HUD để mở lại); thoát game thì trả lại như cũ
     _prevShowCameraPip = widget.motionController.showCameraPip;
     widget.motionController.setCameraPipQuietly(false);
     _engine = EggSmasherEngine();
     _engine.onScored = _onScored;
+    _engine.addListener(_syncMusic);
     _engine.startGame(announce: false);
     _readyGate.onGo = _engine.announceTarget; // đọc từ khi bé đã vào vị trí
 
@@ -98,7 +107,9 @@ class _EggSmasherScreenState extends State<EggSmasherScreen> with SingleTickerPr
     _ticker.dispose();
     _time.dispose();
     _readyGate.dispose();
+    _engine.removeListener(_syncMusic);
     _engine.dispose();
+    MusicService.instance.pop(_music);
     super.dispose();
   }
 

@@ -3,6 +3,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show AssetManifest, rootBundle;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'music_service.dart';
 
 class SoundService {
   static final SoundService instance = SoundService._internal();
@@ -34,6 +35,10 @@ class SoundService {
   DateTime _lastChomp = DateTime.fromMillisecondsSinceEpoch(0);
 
   bool get isMuted => _isMuted;
+  bool _settingsLoaded = false;
+
+  /// Đã đọc xong cài đặt tắt tiếng / âm lượng (nhạc nền chờ cờ này để không phát thoáng qua khi bé đã tắt tiếng)
+  bool get settingsLoaded => _settingsLoaded;
   double get volume => _volume;
 
   Future<void> _init() async {
@@ -74,6 +79,8 @@ class SoundService {
     } catch (e) {
       debugPrint('SoundService init error: $e');
     }
+    _settingsLoaded = true;
+    MusicService.instance.onMuteChanged();
   }
 
   void _applyVolume() {
@@ -113,6 +120,7 @@ class SoundService {
   Future<void> setMuted(bool muted) async {
     _isMuted = muted;
     _applyVolume();
+    MusicService.instance.onMuteChanged();
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('sfx_muted', _isMuted);
@@ -126,6 +134,7 @@ class SoundService {
   Future<void> setVolume(double volume) async {
     _volume = volume.clamp(0.0, 1.0);
     _applyVolume();
+    MusicService.instance.onMuteChanged();
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setDouble('sfx_volume', _volume);
@@ -280,6 +289,7 @@ class SoundService {
         return;
       }
       final player = _pickPlayer(PlayerMode.mediaPlayer);
+      MusicService.instance.duck(); // hạ nhạc nền để bé nghe rõ từ
 
       final double vol = _volume.clamp(0.0, 1.0);
       await player.setVolume(vol);

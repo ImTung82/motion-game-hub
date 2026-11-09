@@ -491,7 +491,7 @@ class GoalkeeperEngine extends ChangeNotifier {
       crowdJump = 1.0;
 
       SoundService.instance.playCrowdCheer();
-      SoundService.instance.playWord(ball.wordItem.word);
+      // Không đọc lại từ: bóng đã được đọc 1 lần khi bay tới (z >= 0.30, trước vùng bắt z >= 0.80)
 
       onBallSaved?.call(SaveEvent(
         isSuperCatch: true,
@@ -520,8 +520,7 @@ class GoalkeeperEngine extends ChangeNotifier {
       // Sinh tia lửa cản phá
       _spawnBlockParticles(ball.currentX, ball.currentY, hitLeft ? const Color(0xFF00E5FF) : const Color(0xFFFF4081));
 
-      SoundService.instance.playSave();
-      SoundService.instance.playWord(ball.wordItem.word);
+      SoundService.instance.playSave(); // không đọc lại từ (đã đọc khi bóng bay tới)
 
       onBallSaved?.call(SaveEvent(
         isSuperCatch: false,
