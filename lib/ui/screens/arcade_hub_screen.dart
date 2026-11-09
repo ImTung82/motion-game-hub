@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import '../../services/music_service.dart';
 import '../../services/sound_service.dart';
 import 'package:flutter/material.dart';
 import '../../games/penalty_kick/penalty_screen.dart';
@@ -27,6 +28,20 @@ class _ArcadeHubScreenState extends State<ArcadeHubScreen> {
     Color(0xFFFF6B6B), Color(0xFFFFA94D), Color(0xFFFFC107), Color(0xFF51CF66),
     Color(0xFF339AF0), Color(0xFF9775FA), Color(0xFFF06595),
   ];
+
+  late final Object _music;
+
+  @override
+  void initState() {
+    super.initState();
+    _music = MusicService.instance.push(MusicTrack.hub); // game mở chồng lên => game đổi bài, thoát game thì phát lại
+  }
+
+  @override
+  void dispose() {
+    MusicService.instance.pop(_music);
+    super.dispose();
+  }
 
   void _openCalibration() {
     showDialog(
