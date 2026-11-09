@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../motion/motion_state.dart';
 import '../../services/sound_service.dart';
-import '../../services/word_images.dart';
+import '../../services/word_bank.dart';
 import '../../ui/widgets/ready_gate.dart' show ReadyTiming;
 import 'goalkeeper_models.dart';
 
@@ -42,7 +42,7 @@ class GoalkeeperEngine extends ChangeNotifier {
   int ballsSaved = 0;
   int ballsCaught = 0;
   int ballsMissed = 0;
-  final List<WordItem> savedWords = []; // Bộ sưu tập từ bé đã cản được trong ván
+  final List<WordEntry> savedWords = []; // Bộ sưu tập từ bé đã cản được trong ván
 
   // Chờ tay & đếm ngược
   // Bước chuẩn bị (cùng luật với ReadyGate của các game khác): phải thấy ĐỦ 2 tay mới bắt đầu, không tự
@@ -62,8 +62,8 @@ class GoalkeeperEngine extends ChangeNotifier {
   double _spawnTimer = 1.0;
   int _ballIdCounter = 0;
   double _gameTime = 0.0;
-  List<WordItem> _deck = [];
-  WordItem? _lastWord;
+  List<WordEntry> _deck = [];
+  WordEntry? _lastWord;
   double nextStartX = 0.0; // Vị trí quả bóng đang nằm chờ trên chấm phạt đền
 
   // Hiệu ứng
@@ -361,10 +361,10 @@ class GoalkeeperEngine extends ChangeNotifier {
   }
 
   /// Rút từ theo kiểu xáo bài: hết bộ mới xáo lại, không để 2 quả liên tiếp trùng từ
-  WordItem _nextWord() {
+  WordEntry _nextWord() {
     if (_deck.isEmpty) {
       // (chạy thử trên localhost: chỉ từ đã có ảnh, xem WordImages.testImagesOnly)
-      _deck = WordImages.instance.shuffledPreferImages(allKeeperWords, (w) => w.word, _random, min: 3);
+      _deck = WordBank.instance.shuffled(_random, min: 3);
       if (_deck.length > 1 && _deck.last == _lastWord) {
         final tmp = _deck.first;
         _deck.first = _deck.last;
@@ -549,7 +549,7 @@ class GoalkeeperEngine extends ChangeNotifier {
     if (streak > maxStreak) maxStreak = streak;
   }
 
-  void _collectWord(WordItem word) {
+  void _collectWord(WordEntry word) {
     if (!savedWords.any((w) => w.word == word.word)) savedWords.add(word);
   }
 

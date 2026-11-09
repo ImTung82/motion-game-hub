@@ -1,3 +1,4 @@
+import '../../services/word_bank.dart';
 
 enum ShotOutcome {
   none,
@@ -6,29 +7,17 @@ enum ShotOutcome {
   missed,      // Sút ra ngoài khung thành
 }
 
-class FruitItem {
-  final String name;        // e.g. 'Apple'
-  final String emoji;       // e.g. '🍎'
-  final int colorValue;     // e.g. 0xFFFF2A55
-
-  const FruitItem({
-    required this.name,
-    required this.emoji,
-    required this.colorValue,
-  });
-}
-
-class GoalFruitTarget {
+class GoalWordTarget {
   final int slotIndex;      // 0: Trái (-0.48), 1: Giữa (0.0), 2: Phải (+0.48)
-  final FruitItem fruit;
+  final WordEntry word;
   final double x;           // Vị trí X trong khung thành
   final double y;           // Vị trí Y (độ cao trên lưới)
   bool isHit;
   double hitWobble;         // Hiệu ứng rung lắc khi bị bóng sút trúng
 
-  GoalFruitTarget({
+  GoalWordTarget({
     required this.slotIndex,
-    required this.fruit,
+    required this.word,
     required this.x,
     required this.y,
     this.isHit = false,
@@ -101,23 +90,3 @@ class PenaltyParticle {
     return life > 0;
   }
 }
-
-/// Bộ đề hoa quả cho Fruits Penalty (tên viết hoa chữ cái đầu; audio: `assets/words/fruits/<tên thường>.mp3`)
-const List<FruitItem> kAllFruits = [
-  FruitItem(name: 'Apple', emoji: '🍎', colorValue: 0xFFFF2A55),
-  FruitItem(name: 'Banana', emoji: '🍌', colorValue: 0xFFFFD600),
-  FruitItem(name: 'Orange', emoji: '🍊', colorValue: 0xFFFF7A00),
-  FruitItem(name: 'Watermelon', emoji: '🍉', colorValue: 0xFF00E676),
-  FruitItem(name: 'Grapes', emoji: '🍇', colorValue: 0xFFAA00FF),
-  FruitItem(name: 'Strawberry', emoji: '🍓', colorValue: 0xFFFF1744),
-  FruitItem(name: 'Pineapple', emoji: '🍍', colorValue: 0xFFFFAB00),
-  FruitItem(name: 'Mango', emoji: '🥭', colorValue: 0xFFFF9100),
-  FruitItem(name: 'Lemon', emoji: '🍋', colorValue: 0xFFFFF176),
-  FruitItem(name: 'Peach', emoji: '🍑', colorValue: 0xFFFF8A80),
-  FruitItem(name: 'Cherry', emoji: '🍒', colorValue: 0xFFE91E63),
-  FruitItem(name: 'Pear', emoji: '🍐', colorValue: 0xFFC6E36B),
-  FruitItem(name: 'Kiwi', emoji: '🥝', colorValue: 0xFF8BC34A),
-  FruitItem(name: 'Coconut', emoji: '🥥', colorValue: 0xFFA1887F),
-  FruitItem(name: 'Melon', emoji: '🍈', colorValue: 0xFFB2FF59),
-  FruitItem(name: 'Avocado', emoji: '🥑', colorValue: 0xFF689F38),
-];

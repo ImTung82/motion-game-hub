@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 import '../../motion/face_motion_controller.dart';
 import 'arcade_hub_screen.dart';
+import '../../services/word_bank.dart';
 
 class SplashScreen extends StatefulWidget {
   final FaceMotionController motionController;
@@ -31,9 +32,11 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     });
   }
 
-  void _navigateToHub() {
+  Future<void> _navigateToHub() async {
     if (_navigated || !mounted) return;
     _navigated = true;
+    await WordBank.instance.load(); // thường đã xong từ lâu; game cần kho từ ngay khi bắt đầu
+    if (!mounted) return;
 
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(

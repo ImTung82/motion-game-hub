@@ -543,7 +543,7 @@ class _GoalkeeperPainter extends CustomPainter {
   }
 
   /// Huy hiệu ưu tiên hình ảnh: emoji thật to (bé chưa biết đọc), chữ nhỏ bên dưới
-  void _drawWordBadge(Canvas canvas, KeeperLayout l, Offset bottomCenter, WordItem word, double z) {
+  void _drawWordBadge(Canvas canvas, KeeperLayout l, Offset bottomCenter, WordEntry word, double z) {
     final scale = (z * 1.1).clamp(0.65, 1.0) * l.u;
 
     // Chữ layout 1 lần ở cỡ gốc (l.u) rồi phóng theo độ sâu bằng canvas.scale: cỡ đổi mỗi khung khi bóng bay tới
@@ -582,7 +582,7 @@ class _GoalkeeperPainter extends CustomPainter {
     canvas.scale(f);
     // Ảnh minh họa của từ (assets/words) chiếm đúng chỗ của emoji; chưa có ảnh thì vẽ emoji
     final double picSide = emojiPainter.height;
-    if (!WordImages.instance.paint(canvas, word.word, Rect.fromLTWH(-picSide / 2, 0, picSide, picSide), radius: 6 * l.u)) {
+    if (!WordImages.instance.paint(canvas, word.id, Rect.fromLTWH(-picSide / 2, 0, picSide, picSide), radius: 6 * l.u)) {
       emojiPainter.paint(canvas, Offset(-emojiPainter.width / 2, 0));
     }
     labelPainter.paint(canvas, Offset(-labelPainter.width / 2, emojiPainter.height));

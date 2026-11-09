@@ -1,25 +1,12 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../../services/word_bank.dart';
 
 enum EggState {
   idle,
   wobbling,
   cracking,
   shattered,
-}
-
-class PhonicsWord {
-  final String word;
-  final String phonicsFamily;
-  final String iconEmoji;
-  final IconData materialIcon;
-
-  const PhonicsWord({
-    required this.word,
-    required this.phonicsFamily,
-    required this.iconEmoji,
-    required this.materialIcon,
-  });
 }
 
 class EggColorTheme {
@@ -65,7 +52,7 @@ class EggColorTheme {
 
 class EggItem {
   final int id;
-  final PhonicsWord word;
+  final WordEntry word;
   double x; // normalized 0..1 (center)
   double y; // normalized 0..1 (center)
   double radiusX;
@@ -166,7 +153,7 @@ class SparkleStar {
 class HatchedCreature {
   double x;
   double y;
-  final PhonicsWord word;
+  final WordEntry word;
   double scale = 0.0;
   double bounceY = 0.0;
   double life = 1.0;

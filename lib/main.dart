@@ -4,12 +4,14 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'core/constants.dart';
 import 'motion/face_motion_controller.dart';
+import 'services/word_bank.dart';
 import 'services/word_images.dart';
 import 'ui/screens/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   WordImages.instance.preload(); // giải mã sẵn ảnh minh hoạ của từ, chạy nền
+  WordBank.instance.load(); // dò kho từ trong assets/words, chạy nền (màn splash chờ xong mới vào hub)
 
   final motionController = FaceMotionController();
 

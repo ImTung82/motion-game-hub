@@ -417,12 +417,12 @@ class PenaltyCanvasPainter extends CustomPainter {
         ..strokeWidth = isAnswer ? 4.0 : (isAimed ? 3.5 : 1.5);
       canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(12)), borderPaint);
 
-      // Chỉ hiển thị hình hoa quả (ảnh trong assets/words, chưa có thì emoji), to và căn giữa ô
+      // Chỉ hiển thị hình của từ (ảnh trong assets/words, chưa có thì emoji), to và căn giữa ô
       final double picSide = math.min(boardW, boardH) * 0.8;
       final picBox = Rect.fromCenter(center: Offset.zero, width: picSide, height: picSide);
-      if (!WordImages.instance.paint(canvas, target.fruit.name, picBox, radius: 8)) {
+      if (!WordImages.instance.paint(canvas, target.word.id, picBox, radius: 8)) {
         final emojiTp = TextPainterCache.get(
-          target.fruit.emoji,
+          target.word.emoji,
           TextStyle(fontSize: (math.min(boardW, boardH) * 0.62).clamp(24.0, 72.0)),
         );
         emojiTp.paint(canvas, Offset(-emojiTp.width / 2, -emojiTp.height / 2));
