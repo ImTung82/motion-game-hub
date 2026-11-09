@@ -33,8 +33,12 @@
         "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
       },
       {
-        "source": "@(assets|canvaskit|icons)/**",
+        "source": "@(canvaskit|icons)/**",
         "headers": [{ "key": "Cache-Control", "value": "public, max-age=86400" }]
+      },
+      {
+        "source": "assets/**",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
       },
       {
         "source": "motion/@(mediapipe|models)/**",

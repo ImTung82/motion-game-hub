@@ -25,8 +25,10 @@ Chạy trên Android (ML Kit + MediaPipe native) và Web (MediaPipe JS trong `we
   tên chữ thường trùng từ trong game (VD `animals/cat.mp3`, `animals/cat.png`). Thêm nhóm mới => khai báo thư mục trong `pubspec.yaml`.
 - Mọi game dùng chung kho từ `WordBank` (`lib/services/word_bank.dart`): dò mọi `.mp3` trong `assets/words` qua
   AssetManifest => thêm `.mp3` + ảnh cho từ mới là cả 3 game tự dùng, không sửa code. Từ chưa có ảnh vẽ emoji trong
-  bảng `_emoji` của `WordBank` (chưa có cả ảnh lẫn emoji thì bỏ qua). Khi đủ ảnh cho mọi từ thì bỏ hẳn bảng emoji
-  (và bỏ `WordImages.testImagesOnly`).
+  bảng `_emoji` của `WordBank` (chưa có cả ảnh lẫn emoji thì bỏ qua). GIỮ bảng emoji kể cả khi đủ ảnh: nó còn là kho
+  dự phòng khi không đọc được AssetManifest (trình duyệt giữ manifest cũ => kho rỗng => game sập "Bad state: No element").
+- `firebase.json`: `assets/**` để `no-cache` (trình duyệt hỏi lại bằng ETag) vì file đổi nội dung mà giữ tên
+  (`AssetManifest.bin.json`, ảnh từ). Đừng đặt lại `max-age` dài cho `assets/`.
 - Ảnh tra theo `WordEntry.id` = `<nhóm>/<từ>` vì có từ trùng tên khác nhóm (`colors/orange` vs `fruits/orange`);
   `WordBank.shuffled` bỏ từ trùng chữ trong cùng 1 lượt.
 - Chạy thử (web localhost / bản debug): game chỉ ra từ ĐÃ CÓ ẢNH, thiếu thì bù từ emoji cho đủ số ô
