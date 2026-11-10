@@ -84,6 +84,8 @@ class MotionState {
   final double rawPitch;
   final double smoothPitch;
   final double relativePitch;
+  /// Đang gật đầu xuống (đã qua ngưỡng, có trễ & giữ đủ lâu - tính trong FaceMotionController)
+  final bool isNodding;
 
   final double smileProb;
   final double leftEyeOpen;
@@ -146,6 +148,7 @@ class MotionState {
     this.rawPitch = 0.0,
     this.smoothPitch = 0.0,
     this.relativePitch = 0.0,
+    this.isNodding = false,
     this.smileProb = 0.0,
     this.leftEyeOpen = 1.0,
     this.rightEyeOpen = 1.0,
@@ -196,6 +199,7 @@ class MotionState {
     double? rawPitch,
     double? smoothPitch,
     double? relativePitch,
+    bool? isNodding,
     double? smileProb,
     double? leftEyeOpen,
     double? rightEyeOpen,
@@ -241,6 +245,7 @@ class MotionState {
       rawPitch: rawPitch ?? this.rawPitch,
       smoothPitch: smoothPitch ?? this.smoothPitch,
       relativePitch: relativePitch ?? this.relativePitch,
+      isNodding: isNodding ?? this.isNodding,
       smileProb: smileProb ?? this.smileProb,
       leftEyeOpen: leftEyeOpen ?? this.leftEyeOpen,
       rightEyeOpen: rightEyeOpen ?? this.rightEyeOpen,

@@ -154,7 +154,10 @@ class FaceMotionController extends ChangeNotifier {
   double _clapThreshold = 0.20;
 
   // Bộ chống rung (Debounce)
-  int _chompDebounce = 0;
+  double _mouthOpenHeld = 0.0; // há miệng quá ngưỡng liên tục bao lâu (giây)
+  double _nodHeld = 0.0; // cúi đầu quá ngưỡng liên tục bao lâu (giây)
+  bool _isNodding = false;
+  bool _nodArmed = false; // phải thấy đầu ở tư thế thẳng trước rồi mới tính gật
   int _tiltLeftDebounce = 0;
   int _tiltRightDebounce = 0;
 
@@ -366,7 +369,7 @@ class FaceMotionController extends ChangeNotifier {
         _consecutiveEmptyFrames = 0;
       }
 
-      _chompDebounce = 0;
+      _resetFaceGestures();
       _tiltLeftDebounce = 0;
       _tiltRightDebounce = 0;
       _state = _state.copyWith(
@@ -376,6 +379,7 @@ class FaceMotionController extends ChangeNotifier {
         tiltDirection: TiltDirection.neutral,
         steerX: 0.0,
         isChomping: false,
+        isNodding: false,
         fps: currentFps,
         latencyMs: latency,
         timestamp: endTime,
@@ -423,8 +427,8 @@ class FaceMotionController extends ChangeNotifier {
       _calibrationFrames++;
       _calibSampleSec += dt;
 
-      // ~6 khung ở 30 lần/giây (0,2s); máy chậm thì đủ thời gian & ít nhất 3 mẫu là xong
-      if (_calibrationFrames >= 6 || (_calibrationFrames >= 3 && _calibSampleSec >= 6 * kTunedSampleDt)) {
+      // ~12 khung ở 30 lần/giây (0,4s) cho mốc đỡ nhiễu; máy chậm thì đủ thời gian & ít nhất 4 mẫu là xong
+      if (_calibrationFrames >= 12 || (_calibrationFrames >= 4 && _calibSampleSec >= 12 * kTunedSampleDt)) {
         _neutralRoll = _calibRollSum / _calibrationFrames;
         _baselineMouth = _calibMouthSum / _calibrationFrames;
         _neutralYaw = _calibYawSum / _calibrationFrames;
@@ -449,6 +453,20 @@ class FaceMotionController extends ChangeNotifier {
       final curRollDiff = _smoothedRoll - _neutralRoll;
       if (curRollDiff.abs() < 4.0) {
         _neutralRoll += curRollDiff * drift;
+      }
+      // Mốc ngẩng/cúi bám theo tư thế ngồi thật (bé ngồi thấp dần, đặt máy lệch...): chỉ trôi khi đầu gần
+      // thẳng, nên cú gật (nhanh, sâu > 12°) không bị mốc "đuổi theo" làm mất.
+      final curPitchDiff = _smoothedPitch - _neutralPitch;
+      if (curPitchDiff.abs() < 4.0) {
+        _neutralPitch += curPitchDiff * drift;
+      }
+      // Mốc ngậm miệng: miệng ngậm là lúc giá trị NHỎ NHẤT => thấp hơn mốc thì bám xuống nhanh; cao hơn chút
+      // (môi hé tự nhiên) thì nhích lên rất chậm, chỉ khi chưa há. Mốc quá thấp là nguyên nhân "chưa há đã ăn".
+      final curMouthDiff = _smoothedMouth - _baselineMouth;
+      if (curMouthDiff < 0) {
+        _baselineMouth += curMouthDiff * timedAlpha(0.08, dt);
+      } else if (!_state.isChomping && curMouthDiff < _mouthCloseThreshold) {
+        _baselineMouth += curMouthDiff * timedAlpha(0.01, dt);
       }
     }
 
@@ -485,19 +503,41 @@ class FaceMotionController extends ChangeNotifier {
       steerX = relativeRoll.sign * ((rollAbs - _tiltRelease) / (full - _tiltRelease)).clamp(0.0, 1.0);
     }
 
-    bool isChomping = _state.isChomping;
+    // Há miệng / gật đầu: có trễ (hysteresis) + phải giữ quá ngưỡng >= faceGestureHoldSec (tính theo thời gian
+    // giữa 2 kết quả nhận diện) => 1 khung nhiễu, nói / đọc theo từ không kích hoạt. Đang cân bằng mốc thì không tính.
+    const double holdSec = MotionDefaults.faceGestureHoldSec;
+    final bool calibrating = _isCalibrating;
+    bool isChomping = _state.isChomping && !calibrating;
     if (!isChomping) {
-      if (relativeMouth > _mouthOpenThreshold) {
-        _chompDebounce++;
-        if (_chompDebounce >= 1) isChomping = true;
+      if (!calibrating && relativeMouth > _mouthOpenThreshold) {
+        _mouthOpenHeld += dt;
+        if (_mouthOpenHeld >= holdSec) isChomping = true;
       } else {
-        _chompDebounce = 0;
+        _mouthOpenHeld = 0.0;
       }
-    } else {
-      if (relativeMouth < _mouthCloseThreshold) {
-        isChomping = false;
-        _chompDebounce = 0;
+    } else if (relativeMouth < _mouthCloseThreshold) {
+      isChomping = false;
+      _mouthOpenHeld = 0.0;
+    }
+
+    if (calibrating) {
+      _isNodding = false;
+      _nodArmed = false;
+      _nodHeld = 0.0;
+    } else if (!_isNodding) {
+      if (relativePitch > MotionDefaults.nodReleaseDeg) _nodArmed = true;
+      if (_nodArmed && relativePitch < MotionDefaults.nodTriggerDeg) {
+        _nodHeld += dt;
+        if (_nodHeld >= holdSec) {
+          _isNodding = true;
+          _nodArmed = false;
+        }
+      } else {
+        _nodHeld = 0.0;
       }
+    } else if (relativePitch > MotionDefaults.nodReleaseDeg) {
+      _isNodding = false;
+      _nodHeld = 0.0;
     }
 
     // Vị trí khuôn mặt trên màn hình preview (cùng phép lật gương/xoay như reticle bàn tay)
@@ -527,6 +567,7 @@ class FaceMotionController extends ChangeNotifier {
       rawPitch: rawPitch,
       smoothPitch: _smoothedPitch,
       relativePitch: relativePitch,
+      isNodding: _isNodding,
       smileProb: smileProb,
       leftEyeOpen: leftEyeOpen,
       rightEyeOpen: rightEyeOpen,
@@ -1186,6 +1227,13 @@ class FaceMotionController extends ChangeNotifier {
     }
   }
 
+  void _resetFaceGestures() {
+    _mouthOpenHeld = 0.0;
+    _nodHeld = 0.0;
+    _isNodding = false;
+    _nodArmed = false;
+  }
+
   void _clearCalibSums() {
     _calibHandXSum = 0.0;
     _calibHandYSum = 0.0;
@@ -1220,6 +1268,7 @@ class FaceMotionController extends ChangeNotifier {
       _resetHandCalibration();
     } else {
       _hasFaceCalibratedOnce = false;
+      _resetFaceGestures();
       _calibRollSum = 0.0;
       _calibMouthSum = 0.0;
       _calibYawSum = 0.0;
@@ -1256,6 +1305,9 @@ class FaceMotionController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Tăng khi đổi ngưỡng mặc định của Face mode => bỏ ngưỡng cũ đã lưu
+  static const int _faceTuningVersion = 2;
+
   Future<void> _loadPreferences() async {
     final prefs = await SharedPreferences.getInstance();
     _neutralRoll = prefs.getDouble('neutral_roll') ?? 0.0;
@@ -1287,12 +1339,18 @@ class FaceMotionController extends ChangeNotifier {
     final savedTilt = prefs.getDouble('neutral_hand_tilt') ?? 0.0;
     // Nếu mốc cũ bị kẹt ở -65 độ do lỗi xoay trước đây, reset lại 0.0 để cân bằng chuẩn
     _neutralHandTilt = (savedTilt.abs() > 45.0) ? 0.0 : savedTilt;
-    _mouthOpenThreshold = prefs.getDouble('mouth_threshold') ?? MotionDefaults.defaultMouthOpenThreshold;
+    // Bản cũ lưu ngưỡng há miệng mặc định 0.12 (quá nhạy) mỗi lần lưu cài đặt => chưa có mốc phiên bản mới thì
+    // bỏ giá trị cũ, dùng mặc định mới. Người dùng chỉnh lại thanh "Mouth open needed" thì vẫn được giữ.
+    final bool faceTuningCurrent = (prefs.getInt('face_tuning_v') ?? 0) >= _faceTuningVersion;
+    _mouthOpenThreshold = (faceTuningCurrent ? prefs.getDouble('mouth_threshold') : null) ??
+        MotionDefaults.defaultMouthOpenThreshold;
     _tiltRelease = _tiltThreshold * 0.5;
     _mouthCloseThreshold = _mouthOpenThreshold * 0.55;
 
     // Đánh dấu đã cân bằng riêng biệt cho Face và Hand
-    _hasFaceCalibratedOnce = prefs.containsKey('neutral_roll');
+    // Face: luôn cân bằng lại mốc mỗi lần mở camera. Mốc ngẩng/cúi & ngậm miệng của lần chơi trước (tư thế, chỗ
+    // đặt máy khác) làm lệch sẵn vài độ => chưa gật / chưa há đã kích hoạt.
+    _hasFaceCalibratedOnce = false;
     _hasHandCalibratedOnce = prefs.containsKey('neutral_hand_tilt') && prefs.containsKey('neutral_hand_x');
     _calibratedHandRotation = _hasHandCalibratedOnce ? _aiHandRotationIndex : -1;
   }
@@ -1322,6 +1380,7 @@ class FaceMotionController extends ChangeNotifier {
     await prefs.setString('motion_input_mode', _inputMode == MotionInputMode.hand ? 'hand' : 'face');
     await prefs.setDouble('tilt_threshold', _tiltThreshold);
     await prefs.setDouble('mouth_threshold', _mouthOpenThreshold);
+    await prefs.setInt('face_tuning_v', _faceTuningVersion);
   }
 
   @override

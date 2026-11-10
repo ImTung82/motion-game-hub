@@ -68,8 +68,8 @@ class PenaltyEngine extends ChangeNotifier {
   double? get goalCelebrationTime => currentOutcome == ShotOutcome.goal ? _outcomeDelayTimer : null;
 
   bool _wasFist = false;
-  bool _nodArmed = true;
-  bool _wasChomping = false;
+  bool _wasNodding = true; // true: đang cúi sẵn lúc vào game thì phải ngẩng lên rồi gật mới tính
+  bool _wasChomping = true; // như _wasNodding: đang há sẵn lúc vào game thì phải ngậm lại rồi há mới sút
   DateTime _lastShotTime = DateTime.fromMillisecondsSinceEpoch(0);
 
   final math.Random _random = math.Random();
@@ -232,12 +232,11 @@ class PenaltyEngine extends ChangeNotifier {
         aimX += (targetAimX - aimX) * (14.0 * dt).clamp(0.0, 1.0);
 
         // Gật đầu xuống dưới để sút
-        final pitch = motion.relativePitch;
-        if (pitch > -3.0) _nodArmed = true;
-        if (_nodArmed && pitch < -6.5 && now.difference(_lastShotTime).inMilliseconds > 500) {
-          _nodArmed = false;
+        // isNodding đã có trễ (hysteresis) + giữ đủ lâu trong FaceMotionController: sút khi vừa bắt đầu gật
+        if (motion.isNodding && !_wasNodding && now.difference(_lastShotTime).inMilliseconds > 500) {
           executePlayerShot();
         }
+        _wasNodding = motion.isNodding;
 
         // Hoặc Há miệng để sút
         if (motion.isChomping && !_wasChomping && now.difference(_lastShotTime).inMilliseconds > 500) {

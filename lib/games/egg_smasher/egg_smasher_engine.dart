@@ -74,7 +74,7 @@ class EggSmasherEngine extends ChangeNotifier {
   // Trạng thái nắm tay để lướt búa (Hand Mode Grab & Drag)
   bool isHandGrabbing = false;
   bool _wasHandFist = false;
-  bool _nodArmed = true;
+  bool _wasNodding = true; // true: đang cúi sẵn lúc vào game thì phải ngẩng lên rồi gật mới tính
 
   // Trạng thái gật đầu để đập búa (Face Mode Nod Down)
 
@@ -226,15 +226,11 @@ class EggSmasherEngine extends ChangeNotifier {
 
       // CỬ CHỈ ĐẬP DUY NHẤT Ở FACE MODE: GẬT ĐẦU XUỐNG DƯỚI (Head Nod Down)
       // ĐÃ BỎ HÀNH ĐỘNG HÁ MIỆNG THEO YÊU CẦU CỦA USER
-      // Máy trạng thái có trễ (hysteresis): đầu phải ngẩng lại (> -3°) mới "lên cò", gật qua -6.5° thì đập
-      final double pitch = motion.relativePitch;
-      if (pitch > -3.0) _nodArmed = true;
-      if (_nodArmed &&
-          pitch < -6.5 &&
-          now.difference(_lastSmashTime).inMilliseconds > 500) {
-        _nodArmed = false;
+      // isNodding đã có trễ (hysteresis) + giữ đủ lâu trong FaceMotionController: đập 1 lần khi vừa bắt đầu gật
+      if (motion.isNodding && !_wasNodding && now.difference(_lastSmashTime).inMilliseconds > 500) {
         _triggerSmash(cursorX, cursorY);
       }
+      _wasNodding = motion.isNodding;
     } else {
       isHandGrabbing = false;
     }

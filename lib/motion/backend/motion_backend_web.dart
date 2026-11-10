@@ -182,9 +182,10 @@ class WebMotionBackend extends MotionBackend {
 
     // Ngẩng/cúi: vector cằm -> trán trong không gian 3D. Cúi đầu (gật) thì trán tiến về camera (z giảm)
     // => góc âm; ngẩng lên => góc dương (cùng quy ước ML Kit headEulerAngleX)
+    // Cạnh kề = độ dài cằm -> trán TRONG ẢNH (không chỉ trục y): nghiêng đầu ngắm (roll) thì trục y ngắn lại
+    // => góc cúi bị phóng to giả, chưa gật đã ăn. faceH đã là độ dài đó.
     final double upZ = depth(4) - depth(5);
-    final double upY = top.dy - chin.dy; // âm khi mặt thẳng (trán ở trên cằm)
-    final double rawPitch = math.atan2(upZ, -upY) * 180.0 / math.pi;
+    final double rawPitch = math.atan2(upZ, math.max(faceH, 1e-6)) * 180.0 / math.pi;
 
     // Quay mặt trái/phải: vector mắt trái ẢNH -> mắt phải ẢNH theo trục z
     final double eyeZ = aIsLeft ? depth(1) - depth(0) : depth(0) - depth(1);

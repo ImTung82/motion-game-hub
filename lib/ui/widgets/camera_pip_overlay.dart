@@ -47,7 +47,7 @@ class _CameraPipOverlayState extends State<CameraPipOverlay> {
         final double? posLeft = widget.left;
         final bool isHandMode = ctrl.inputMode == MotionInputMode.hand;
         final bool isDetected = isHandMode ? state.handDetected : state.faceDetected;
-        final bool isNodTriggered = state.relativePitch < -6.5;
+        final bool isNodTriggered = state.isNodding;
         final bool isActionTriggered = isHandMode
         ? state.isHandFist
         : (widget.showNodMode ? isNodTriggered : state.isChomping);
@@ -462,7 +462,7 @@ class _CameraPipOverlayState extends State<CameraPipOverlay> {
                                   ],
                                 ),
                                 const SizedBox(height: 2),
-                                _buildNodBar(state.relativePitch, -7.0, isNodTriggered),
+                                _buildNodBar(state.relativePitch, MotionDefaults.nodTriggerDeg, isNodTriggered),
                               ] else ...[
                                 Row(
                                   children: [
